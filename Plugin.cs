@@ -13,7 +13,7 @@ namespace ImprovedMagicShield
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "Slikfoul.ImprovedMagicShield";
-        public const string PluginVersion = "0.3.1";
+        public const string PluginVersion = "1.0.0";
         private Harmony harmony;
         private static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> showProtection;

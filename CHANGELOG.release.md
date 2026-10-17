@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.1
+## 1.0.0
 - Refresh a magic shield when the new cast's full protection is at least its remaining protection, restoring the new capacity and duration while preserving stronger active shields.
 - Display your remaining / maximum protection in a native-style purple resource bar, with capacity-based length, adjustable segment scale, a fixed HUD position and automatic fading outside combat.
 - Show optional remaining-protection numbers above summoned skeleton names and below other characters' native name and health blocks, with adjustable size and vertical offset.

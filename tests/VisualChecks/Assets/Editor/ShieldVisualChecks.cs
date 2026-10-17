@@ -38,14 +38,14 @@ public static class ShieldVisualChecks
         bep.GetType("BepInEx.Paths").GetMethod("SetExecutablePath",All).Invoke(null,new object[]{Path.Combine(testRoot,"valheim.exe"),testRoot,managed,new[]{core,managed}});
         Assembly harmony = Assembly.LoadFrom(Path.Combine(core,"0Harmony.dll"));
         mod = Assembly.LoadFrom(Path.Combine(root,"bin","Release","ImprovedMagicShield.dll"));
-        Check(mod.GetName().Version == new Version(0,3,1,0), "Release assembly version");
+        Check(mod.GetName().Version == new Version(1,0,0,0), "Release assembly version");
         Check(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null, "Run with graphics initialized to exercise the real client controller");
         Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow();
         Type ht=harmony.GetType("HarmonyLib.Harmony"); object patcher=Activator.CreateInstance(ht,new object[]{"ImprovedMagicShield.VisualChecks"});
         try { ht.GetMethod("PatchAll",new[]{typeof(Assembly)}).Invoke(patcher,new object[]{mod}); Check(true,"All gameplay and visual Harmony hooks bind installed game signatures"); }
         finally { ht.GetMethod("UnpatchSelf").Invoke(patcher,null); }
-        string message="ImprovedMagicShield 0.3.1 Unity component checks passed: "+checks;
-        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-0.3.1.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
+        string message="ImprovedMagicShield 1.0.0 Unity component checks passed: "+checks;
+        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.0.0.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
     }
 
     private static void ConfigurationAndController()

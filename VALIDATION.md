@@ -1,8 +1,8 @@
-# Improved Magic Shield 0.3.1 verification
+# Improved Magic Shield 1.0.0 verification
 
 ## Automated coverage
 
-The Release build has no compiler warnings or errors. Version 0.3.1 passed 2234 managed/installed-IL checks and 185 Unity Editor component checks. Run `./Test.ps1` for production helper and UI lifecycle checks using managed game/Unity test doubles, plus installed-game IL checks. Run `./RunVisualChecks.ps1` with Unity 6000.0.75f1 for visual controls against the production DLL and actual Unity components. The exact game assembly and compiled DLL SHA-256 are recorded in the versioned artifacts/checks report. Neither suite is a Valheim gameplay or multiplayer test.
+The Release build has no compiler warnings or errors. Version 1.0.0 passed 2234 managed/installed-IL checks and 185 Unity Editor component checks. Run `./Test.ps1` for production helper and UI lifecycle checks using managed game/Unity test doubles, plus installed-game IL checks. Run `./RunVisualChecks.ps1` with Unity 6000.0.75f1 for visual controls against the production DLL and actual Unity components. The exact game assembly and compiled DLL SHA-256 are recorded in the versioned artifacts/checks report. Neither suite is a Valheim gameplay or multiplayer test.
 
 Covered behavior includes:
 

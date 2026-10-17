@@ -271,7 +271,7 @@ internal static class Program
             Check(method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="Internal_AddStatusEffect")
                 && method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="IsOwner"),"SEMan ownership/RPC convergence changed.");
         var modPlugin=mod.MainModule.Types.Single(t=>t.Name=="Plugin");
-        Check(mod.Name.Version.ToString(3)=="0.3.1","Built DLL version differs.");
+        Check(mod.Name.Version.ToString(3)=="1.0.0","Built DLL version differs.");
         var awake=modPlugin.Methods.Single(m=>m.Name=="Awake").Body.Instructions;
         int showIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show remaining protection"));
         int enabledIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Enabled"));
