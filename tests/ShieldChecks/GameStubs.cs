@@ -10,10 +10,11 @@ public static class Game { public static int m_worldLevel; }
 public class HitData { public short m_itemLevel; public float m_skillLevel; }
 public class Character
 {
+    public GameObject gameObject = new GameObject("Character");
     public static readonly List<Character> All = new List<Character>();
     public ZNetView View = new ZNetView();
     public SEMan Manager = new SEMan();
-    public bool Dead;
+    public bool Dead,Boss;
     public Vector3 RenderedTop = new Vector3(0,2,0), PhysicsCenter;
     public int PhysicsReads;
     public T GetComponent<T>() where T : class { return View as T; }
@@ -23,9 +24,22 @@ public class Character
     public Vector3 GetTopPoint() { return RenderedTop; }
     public float GetRadius() { return 0.5f; }
     public bool IsDead() { return Dead; }
+    public bool IsBoss() { return Boss; }
+}
+public class EnemyHud
+{
+    private class HudData { public GameObject m_gui; }
+    private readonly Dictionary<Character,HudData> m_huds = new Dictionary<Character,HudData>();
+    public static EnemyHud instance;
+    public void Set(Character character, GameObject root) { m_huds[character] = new HudData { m_gui = root }; }
 }
 public class Player : Character
 {
+    public bool Targeted,Attacking,DrawingBow,Blocking;
+    public bool IsTargeted() { return Targeted; }
+    public bool InAttack() { return Attacking; }
+    public bool IsDrawingBow() { return DrawingBow; }
+    public bool IsBlocking() { return Blocking; }
     public static Player m_localPlayer;
     public bool Teleporting,Cutscene;
     public bool IsTeleporting() { return Teleporting; }
@@ -218,16 +232,25 @@ namespace UnityEngine
     }
     public class Behaviour : Component { public bool enabled=true; }
     public class Animator : Behaviour {}
+    public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
+    public class Canvas : Behaviour { public RenderMode renderMode; public Camera worldCamera; public float scaleFactor=1; }
+    public class CanvasGroup : Behaviour { public float alpha=1f; public bool interactable=true,blocksRaycasts=true; }
     public class Sprite : Object {}
     public static class Debug { public static readonly List<string> Warnings=new List<string>(); public static void LogWarning(string text) { Warnings.Add(text); } }
     public class GameObject : Object
     {
         public bool activeSelf=true,Destroyed;
+        public bool activeInHierarchy { get { return activeSelf && !Destroyed && (transform.parent == null || transform.parent.gameObject.activeInHierarchy); } }
         public Transform transform;
         public readonly Dictionary<Type,object> Components=new Dictionary<Type,object>();
         public GameObject(string n,params Type[] types) { name=n; transform=Array.IndexOf(types,typeof(RectTransform))>=0 ? new RectTransform() : new Transform(); transform.gameObject=this; }
         public T AddComponent<T>() where T : new() { var result=new T(); if (result is Component component) component.gameObject=this; Components[typeof(T)]=result; return result; }
         public T GetComponent<T>() { if (transform is T t) return t; return Components.Values.OfType<T>().FirstOrDefault(); }
+        public T GetComponentInParent<T>() where T : class
+        {
+            for (Transform item=transform; item!=null; item=item.parent) { T component=item.gameObject.GetComponent<T>(); if(component!=null)return component; }
+            return null;
+        }
         public T[] GetComponentsInChildren<T>(bool inactive)
         {
             var result=Components.Values.OfType<T>().ToList();
@@ -239,12 +262,15 @@ namespace UnityEngine
     public class Transform : Component
     {
         public Vector3 position,localPosition,localScale=Vector3.one;
+        public Quaternion localRotation;
+        public Vector3 InverseTransformPoint(Vector3 point) { return point-position; }
         public Transform parent;
         public readonly List<Transform> Children=new List<Transform>();
         public void SetParent(Transform p,bool world) { parent=p; p.Children.Add(this); }
         public bool IsChildOf(Transform ancestor) { for(Transform current=this;current!=null;current=current.parent) if(current==ancestor)return true; return false; }
         public int GetSiblingIndex() { return parent.Children.IndexOf(this); }
         public Transform GetChild(int index) { return Children[index]; }
+        public Transform Find(string name) { return Children.FirstOrDefault(c=>c.gameObject.name==name); }
     }
     public struct Vector2
     {
@@ -253,11 +279,17 @@ namespace UnityEngine
         public static Vector2 zero { get { return new Vector2(); } }
         public static Vector2 one { get { return new Vector2(1,1); } }
     }
+    public struct Quaternion { public static Quaternion identity { get { return new Quaternion(); } } }
     public class RectTransform : Transform
     {
         public enum Axis { Horizontal,Vertical }
-        public Vector2 anchorMin,anchorMax,pivot,sizeDelta,offsetMin,offsetMax;
+        public Vector2 anchorMin,anchorMax,pivot,sizeDelta,offsetMin,offsetMax,anchoredPosition;
         public Bounds TestBounds;
+        public void GetWorldCorners(Vector3[] corners)
+        {
+            corners[0]=TestBounds.min; corners[1]=new Vector3(TestBounds.min.x,TestBounds.max.y,0);
+            corners[2]=TestBounds.max; corners[3]=new Vector3(TestBounds.max.x,TestBounds.min.y,0);
+        }
         public Rect rect
         {
             get { var parentRect=parent as RectTransform; return new Rect(0,0,sizeDelta.x+(parentRect==null?0:(anchorMax.x-anchorMin.x)*parentRect.rect.width),sizeDelta.y+(parentRect==null?0:(anchorMax.y-anchorMin.y)*parentRect.rect.height)); }
@@ -272,6 +304,7 @@ namespace UnityEngine
     public struct Bounds { public Vector3 center,min,max; }
     public static class RectTransformUtility
     {
+        public static Vector2 WorldToScreenPoint(Camera camera,Vector3 position) { return new Vector2(position.x,position.y); }
         public static Bounds CalculateRelativeRectTransformBounds(Transform parent,RectTransform rect) { return rect.TestBounds; }
     }
     public class Camera
@@ -320,6 +353,7 @@ namespace UnityEngine
         public static int RoundToInt(float f) { return (int)Math.Round(f); }
         public static int Clamp(int i,int min,int max) { return Math.Min(max,Math.Max(min,i)); }
         public static float Max(float a,float b) { return Math.Max(a,b); }
+        public static float Min(float a,float b) { return Math.Min(a,b); }
     }
 }
 namespace UnityEngine.UI
@@ -330,9 +364,13 @@ namespace UnityEngine.UI
 namespace TMPro
 {
     public enum TextAlignmentOptions { Center }
+    public enum TextOverflowModes { Overflow }
+    public enum TextWrappingModes { NoWrap }
     public class TMP_Text : UnityEngine.UI.Graphic
     {
-        public string text; public bool enableAutoSizing; public float fontSize;
+        public string text; public bool enableAutoSizing,enableWordWrapping; public float fontSize;
+        public TextOverflowModes overflowMode;
+        public TextWrappingModes textWrappingMode;
         public UnityEngine.Object font,fontSharedMaterial; public TextAlignmentOptions alignment;
         public UnityEngine.RectTransform rectTransform { get { return (UnityEngine.RectTransform)gameObject.transform; } }
         public UnityEngine.Vector2 GetPreferredValues(string value) { return new UnityEngine.Vector2(value.Length*fontSize*0.5f,16); }

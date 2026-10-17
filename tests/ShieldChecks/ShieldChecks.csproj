@@ -12,6 +12,7 @@
     <Compile Include="../../HudPolicy.cs" Link="HudPolicy.cs" />
     <Compile Include="../../ShieldHud.cs" Link="ShieldHud.cs" />
     <Compile Include="../../ShieldLabels.cs" Link="ShieldLabels.cs" />
+    <Compile Include="../../ShieldLabelAnchor.cs" Link="ShieldLabelAnchor.cs" />
     <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>
     <Reference Include="Mono.Cecil"><HintPath>$(BepInExCore)\Mono.Cecil.dll</HintPath></Reference>
   </ItemGroup>

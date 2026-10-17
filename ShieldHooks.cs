@@ -7,6 +7,17 @@ using HarmonyLib;
 
 namespace ImprovedMagicShield
 {
+    // Observe the owner's vanilla notification. Only an alerted enemy's target
+    // report counts; sensing, attack inputs and block stance do not change the HUD.
+    [HarmonyPatch(typeof(Player), "RPC_OnTargeted")]
+    internal static class ShieldThreatHook
+    {
+        internal static void Postfix(Player __instance, bool alerted)
+        {
+            if (Plugin.IsEnabled) ShieldHud.ObserveThreat(__instance, alerted);
+        }
+    }
+
     [HarmonyPatch(typeof(Character), "RPC_Damage")]
     internal static class HitShieldHook
     {

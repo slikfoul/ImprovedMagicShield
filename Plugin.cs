@@ -13,12 +13,14 @@ namespace ImprovedMagicShield
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "Slikfoul.ImprovedMagicShield";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.3.1";
         private Harmony harmony;
         private static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> showProtection;
         private static ConfigEntry<bool> showHud;
         private static ConfigEntry<int> labelScale;
+        private static ConfigEntry<int> protectionPerSegment;
+        private static ConfigEntry<int> labelOffset;
         private static bool hooksReady;
         internal static bool IsEnabled { get { return hooksReady && modEnabled != null && modEnabled.Value; } }
         private ShieldLabels labels;
@@ -29,8 +31,10 @@ namespace ImprovedMagicShield
         {
             modEnabled = Config.Bind("1 - General", "Enabled", true, "Enable improved shield refreshes, displays and optional appearance controls. Disabling restores vanilla behavior for subsequent casts without removing active shields.");
             showProtection = Config.Bind("2 - Display", "Show remaining protection", false, "Show remaining shield protection above other eligible characters, never your own character. Other characters need this mod on their owning peer to supply current protection.");
-            showHud = Config.Bind("2 - Display", "Show local shield bar", true, "Show your own remaining / full shield protection in the lower resource HUD. Independent of the overhead labels.");
+            showHud = Config.Bind("2 - Display", "Show local shield bar", true, "Show your own remaining / full shield protection in a fixed lower HUD row. Show for five seconds after a cast, shield damage or a vanilla notification that an alerted enemy targets you. Attack, block and bow inputs alone do not reveal the bar. Fade out after five quiet seconds, including damaged shields. Independent of the overhead labels.");
             labelScale = Config.Bind("2 - Display", "Label scale (%)", 100, new ConfigDescription("Size of the remaining-protection label, in percent.", new AcceptableValueRange<int>(50, 300)));
+            protectionPerSegment = Config.Bind("2 - Display", "Protection per segment", 50, new ConfigDescription("Full shield protection represented by one native 32-unit HUD segment. Lower values make the local bar longer. Width follows the currently applied shield, including another caster's shield. The frame keeps shrinking at higher values; its readable caption may extend beyond a short frame. Damage changes only the fill. Whole numbers only.", new AcceptableValueRange<int>(10, 500)));
+            labelOffset = Config.Bind("2 - Display", "Label vertical offset", 0, new ConfigDescription("Move remaining-protection labels relative to their automatic position: above summoned skeleton names, below other visible name/health blocks. Positive values move up; negative values move down. Uses HUD units and follows the native header canvas scale. Does not move the local shield bar. Whole numbers only.", new AcceptableValueRange<int>(-200, 200)));
             var visualSettings = new VisualSettings(Config);
             try
             {
@@ -61,17 +65,17 @@ namespace ImprovedMagicShield
 
         private void OnGUI()
         {
-            if (labels != null && IsEnabled && showProtection.Value) labels.Draw(labelScale.Value);
+            if (labels != null && IsEnabled && showProtection.Value) labels.Draw(labelScale.Value, labelOffset.Value);
         }
 
         private void PrepareLabels(Camera camera)
         {
-            if (labels != null) labels.PrepareFrame(camera, IsEnabled && showProtection.Value);
+            if (labels != null) labels.PrepareFrame(camera, IsEnabled && showProtection.Value, labelScale.Value, labelOffset.Value);
         }
 
         private void LateUpdate()
         {
-            if (shieldHud != null) shieldHud.Tick(IsEnabled && showHud.Value);
+            if (shieldHud != null) shieldHud.Tick(IsEnabled && showHud.Value, protectionPerSegment.Value);
             if (shieldVisuals != null) shieldVisuals.Tick(IsEnabled);
         }
 

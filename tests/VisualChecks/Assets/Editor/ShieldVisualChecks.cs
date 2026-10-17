@@ -18,11 +18,16 @@ public static class ShieldVisualChecks
         root = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", ".."));
         string managed = Environment.GetEnvironmentVariable("SHIELD_CHECK_MANAGED") ?? @"G:\Games\SteamLibrary\steamapps\common\Valheim\valheim_Data\Managed";
         string core = Environment.GetEnvironmentVariable("SHIELD_CHECK_CORE") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"r2modmanPlus-local\Valheim\profiles\Default\BepInEx\core");
+        string plugins=Path.GetFullPath(Path.Combine(core,"..","plugins"));
         AppDomain.CurrentDomain.AssemblyResolve += (sender,args) => {
             string name = new AssemblyName(args.Name).Name + ".dll";
             foreach (string directory in new[] { managed, core }) {
                 string path = Path.Combine(directory,name);
-                if (File.Exists(path) && !name.StartsWith("UnityEngine")) return Assembly.LoadFrom(path);
+                if (File.Exists(path) && (!name.StartsWith("UnityEngine") || name=="UnityEngine.UI.dll")) return Assembly.LoadFrom(path);
+            }
+            if (!name.StartsWith("UnityEngine") && Directory.Exists(plugins)) {
+                string dependency=Directory.GetFiles(plugins,name,SearchOption.AllDirectories).FirstOrDefault();
+                if(dependency!=null) return Assembly.LoadFrom(dependency);
             }
             return null;
         };
@@ -33,14 +38,14 @@ public static class ShieldVisualChecks
         bep.GetType("BepInEx.Paths").GetMethod("SetExecutablePath",All).Invoke(null,new object[]{Path.Combine(testRoot,"valheim.exe"),testRoot,managed,new[]{core,managed}});
         Assembly harmony = Assembly.LoadFrom(Path.Combine(core,"0Harmony.dll"));
         mod = Assembly.LoadFrom(Path.Combine(root,"bin","Release","ImprovedMagicShield.dll"));
-        Check(mod.GetName().Version == new Version(0,1,0,0), "Release assembly version");
+        Check(mod.GetName().Version == new Version(0,3,1,0), "Release assembly version");
         Check(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null, "Run with graphics initialized to exercise the real client controller");
-        Visuals(); ShieldShape(); ConfigurationAndController();
+        Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow();
         Type ht=harmony.GetType("HarmonyLib.Harmony"); object patcher=Activator.CreateInstance(ht,new object[]{"ImprovedMagicShield.VisualChecks"});
         try { ht.GetMethod("PatchAll",new[]{typeof(Assembly)}).Invoke(patcher,new object[]{mod}); Check(true,"All gameplay and visual Harmony hooks bind installed game signatures"); }
         finally { ht.GetMethod("UnpatchSelf").Invoke(patcher,null); }
-        string message="ImprovedMagicShield 0.1.0 Unity component checks passed: "+checks;
-        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-0.1.0.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
+        string message="ImprovedMagicShield 0.3.1 Unity component checks passed: "+checks;
+        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-0.3.1.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
     }
 
     private static void ConfigurationAndController()
@@ -61,6 +66,17 @@ public static class ShieldVisualChecks
         SetValue(settings,"Color",120); object options=Call(settings,"Get");
         Check((bool)Get(options,"TintEnabled") && (Color)Get(options,"Tint")==Color.green,"Color automatically applies with the visual master");
         object saved=New("VisualSettings",config); Check((int)Value(saved,"Color")==120,"Rebinding preserves a saved slider value");
+        string managerPath=Environment.GetEnvironmentVariable("SHIELD_CHECK_CONFIG_MANAGER") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),@"r2modmanPlus-local\Valheim\profiles\Default\BepInEx\plugins\shudnal-ConfigurationManager\ConfigurationManager.dll");
+        if(File.Exists(managerPath)) {
+            Type entryType=Assembly.LoadFrom(managerPath).GetType("ConfigurationManager.ConfigSettingEntry",true);
+            object enabledRow=Activator.CreateInstance(entryType,All,null,new[]{Get(settings,"Enabled"),null},null);
+            int enabledOrder=(int)entryType.GetProperty("Order",All).GetValue(enabledRow,null);
+            Check(enabledOrder==100,"Installed ConfigurationManager reads the master switch priority");
+            foreach(string field in new[]{"Color","Glow","Light","Opacity","Ovality"}) {
+                object row=Activator.CreateInstance(entryType,All,null,new[]{Get(settings,field),null},null);
+                Check((int)entryType.GetProperty("Order",All).GetValue(row,null)<enabledOrder,"Magic Shield Effect precedes "+field);
+            }
+        } else Debug.LogWarning("ConfigurationManager ordering checks skipped: set SHIELD_CHECK_CONFIG_MANAGER to its DLL.");
 
         object controller=New("ShieldVisualController",settings,new Action<string>(Debug.LogWarning));
         Call(controller,"Tick",true); // Finish initial catalog rebuild while disabled.
@@ -160,6 +176,138 @@ public static class ShieldVisualChecks
             Near(light.intensity,2.8f,"Removing conflict resumes customization on existing bubble");
             SetValue(settings,"Enabled",false); Call(controller,"Tick",true);
         } finally { plugins.Remove(key); plugins.Remove("fixture.subtleshield"); UnityEngine.Object.DestroyImmediate(owner); }
+    }
+
+    private static void NativeShieldRow()
+    {
+        var host=new GameObject("native resource fixture"); host.SetActive(false);
+        Component hud=host.AddComponent(game.GetType("Hud",true));
+        var canvasRoot=new GameObject("hudroot",typeof(RectTransform),typeof(Canvas)); canvasRoot.SetActive(false);
+        Type hudType=mod.GetType("ImprovedMagicShield.ShieldHud",true);
+        object bar=Activator.CreateInstance(hudType,true);
+        Type barType=hudType.GetField("fast",All).FieldType;
+        Type tmpType=Assembly.Load("Unity.TextMeshPro").GetType("TMPro.TextMeshProUGUI",true);
+        RectTransform Panel(string name) {
+            var rect=(RectTransform)new GameObject(name,typeof(RectTransform)).transform;
+            rect.SetParent(canvasRoot.transform,false); rect.sizeDelta=new Vector2(200,32); return rect;
+        }
+        Component ResourceBar(string name,RectTransform parent) {
+            var rect=(RectTransform)new GameObject(name,typeof(RectTransform)).transform;
+            rect.SetParent(parent,false);
+            var fill=(RectTransform)new GameObject("bar",typeof(RectTransform)).transform;
+            fill.SetParent(rect,false); fill.sizeDelta=new Vector2(184,16);
+            Component component=rect.gameObject.AddComponent(barType); Set(component,"m_bar",fill); return component;
+        }
+        var stamina=Panel("staminapanel"); var eitr=Panel("eitrpanel"); var adrenaline=Panel("adrenalinepanel");
+        // Installed vanilla prefab: Eitr panel at 130, height 32 with bottom pivot;
+        // artwork offset 23. Its center is 169, so the fixed shield center is 192.
+        eitr.anchorMin=eitr.anchorMax=new Vector2(0.5f,0);
+        eitr.pivot=new Vector2(0.5f,0); eitr.anchoredPosition=new Vector2(0,130);
+        var body=(RectTransform)new GameObject("Stamina",typeof(RectTransform)).transform;
+        body.SetParent(eitr,false); body.anchorMax=Vector2.one; body.sizeDelta=new Vector2(-16,-16);
+        body.anchoredPosition=new Vector2(0,23); body.localScale=new Vector3(1,0.5f,1);
+        Component fast=ResourceBar("eitr_fast",body), slow=ResourceBar("eitr_slow",body);
+        var name=(RectTransform)new GameObject("EitrText",typeof(RectTransform)).transform; name.SetParent(body,false);
+        Component text=name.gameObject.AddComponent(tmpType);
+        Set(hud,"m_rootObject",canvasRoot); Set(hud,"m_eitrBarRoot",eitr); Set(hud,"m_staminaBar2Root",stamina);
+        Set(hud,"m_adrenalineBarRoot",adrenaline); Set(hud,"m_eitrBarFast",fast); Set(hud,"m_eitrBarSlow",slow); Set(hud,"m_eitrText",text);
+        try {
+            Call(bar,"Create",hud);
+            var row=(RectTransform)Get(bar,"root"); var art=(RectTransform)Get(bar,"visual");
+            var group=row.GetComponent<CanvasGroup>();
+            Check(row.parent==canvasRoot.transform && row.anchorMin==new Vector2(0.5f,0) && row.anchorMax==row.anchorMin,"Shield row uses the native canvas bottom-center anchor");
+            Check(row.anchoredPosition==new Vector2(0,192) && row.pivot==new Vector2(0.5f,0.5f),"Shield row has a deterministic position and centered width changes");
+            Check(art.anchoredPosition==Vector2.zero && art.localScale==Vector3.one,"Clone discards the current animated Eitr position/scale");
+            Near(art.position.y-body.position.y,23f,"Shield uses the same native 23-unit resource-row spacing");
+            Check(group!=null && !group.interactable && !group.blocksRaycasts,"Native shield CanvasGroup fades without intercepting controls");
+            eitr.anchoredPosition=new Vector2(0,700); stamina.anchoredPosition=new Vector2(800,320); body.anchoredPosition=new Vector2(0,-300);
+            eitr.gameObject.SetActive(false); adrenaline.gameObject.SetActive(false);
+            row.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,80);
+            Check(row.anchoredPosition==new Vector2(0,192) && art.anchoredPosition==Vector2.zero,"Resource movement, visibility and shield width leave its row unchanged");
+            var alpha=mod.GetType("ImprovedMagicShield.HudPolicy").GetMethod("Alpha",All);
+            foreach(var sample in new[]{new Vector2(0,1),new Vector2(5,1),new Vector2(5.25f,0.5f),new Vector2(5.5f,0),new Vector2(100,0)}) {
+                group.alpha=(float)alpha.Invoke(null,new object[]{sample.x}); Near(group.alpha,sample.y,"Real CanvasGroup receives quiet-time fade alpha");
+            }
+        } finally {
+            Call(bar,"Destroy"); UnityEngine.Object.DestroyImmediate(canvasRoot); UnityEngine.Object.DestroyImmediate(host);
+        }
+    }
+
+    private static void NativeLabelGeometry()
+    {
+        Type enemyType=game.GetType("EnemyHud",true), characterType=game.GetType("Character",true);
+        var enemyRoot=new GameObject("native EnemyHud fixture"); enemyRoot.SetActive(false);
+        Component enemy=enemyRoot.AddComponent(enemyType);
+        FieldInfo singleton=enemyType.GetField("m_instance",All); object previous=singleton.GetValue(null);
+        singleton.SetValue(null,enemy);
+        var actor=new GameObject("native Character fixture"); actor.SetActive(false);
+        Component character=actor.AddComponent(characterType);
+        var header=new GameObject("native header",typeof(RectTransform),typeof(Canvas));
+        Canvas canvas=header.GetComponent<Canvas>(); canvas.renderMode=RenderMode.ScreenSpaceOverlay; canvas.scaleFactor=1.5f;
+        var name=(RectTransform)new GameObject("Name",typeof(RectTransform)).transform;
+        name.SetParent(header.transform,false); name.sizeDelta=new Vector2(160,24); name.anchoredPosition=new Vector2(0,45);
+        var health=(RectTransform)new GameObject("Health",typeof(RectTransform)).transform;
+        health.SetParent(header.transform,false); health.sizeDelta=new Vector2(180,10); health.anchoredPosition=new Vector2(0,15);
+        object data=Activator.CreateInstance(enemyType.GetNestedType("HudData",BindingFlags.NonPublic),true); Set(data,"m_gui",header);
+        var huds=(IDictionary)enemyType.GetField("m_huds",All).GetValue(enemy); huds.Add(character,data);
+        object anchor=Activator.CreateInstance(mod.GetType("ImprovedMagicShield.ShieldLabelAnchor",true),true);
+        var corners=new Vector3[4];
+        try {
+            Canvas.ForceUpdateCanvases();
+            object[] args={character,Vector2.zero,1f};
+            Check((bool)Call(anchor,"TryLowerEdge",args),"Production anchor resolves installed EnemyHud fields");
+            health.GetWorldCorners(corners);
+            Near(((Vector2)args[1]).y,corners.Min(p=>p.y),"Real RectTransform health lower edge");
+            Near((float)args[2],canvas.scaleFactor,"Real canvas scale is preserved for the label gap");
+            args=new object[]{character,Vector2.zero,1f};
+            Check((bool)Call(anchor,"TryUpperNameEdge",args),"Production anchor resolves name-only upper edge");
+            name.GetWorldCorners(corners); Near(((Vector2)args[1]).y,corners.Max(p=>p.y),"Above-name placement uses the real native name top");
+            health.gameObject.SetActive(false); args=new object[]{character,Vector2.zero,1f}; Call(anchor,"TryLowerEdge",args);
+            name.GetWorldCorners(corners); Near(((Vector2)args[1]).y,corners.Min(p=>p.y),"Hidden real health bar leaves the visible name as anchor");
+            header.SetActive(false); args=new object[]{character,Vector2.zero,1f}; Check(!(bool)Call(anchor,"TryLowerEdge",args),"Hidden real header requests character fallback");
+            header.SetActive(true); health.gameObject.SetActive(true);
+            Type tmpType=Assembly.Load("Unity.TextMeshPro").GetType("TMPro.TextMeshProUGUI",true);
+            Component nativeText=name.gameObject.AddComponent(tmpType);
+            Call(anchor,"TryRender",character,true,365f,100,0);
+            var caption=(RectTransform)header.transform.Find("ImprovedMagicShield.Protection");
+            Check(caption!=null && caption.parent==header.transform,"Protection caption belongs to the native header canvas");
+            Component captionText=caption.GetComponent(tmpType);
+            Check((string)captionText.GetType().GetProperty("text").GetValue(captionText,null)=="365","Real TMP caption receives remaining protection");
+            name.GetWorldCorners(corners); float nativeTop=corners.Max(p=>p.y);
+            caption.GetWorldCorners(corners); Near(corners.Min(p=>p.y),nativeTop+4f*canvas.scaleFactor,"Real native caption stays above the name without overlap");
+            Vector3 localPose=caption.localPosition;
+            Vector3 captionWorld=caption.position;
+            header.transform.position+=new Vector3(73,19,0);
+            Near(caption.position.x-captionWorld.x,73,"Caption follows native header movement without a new screen projection");
+            Near(caption.position.y-captionWorld.y,19,"Caption shares native header vertical movement");
+            Call(anchor,"TryRender",character,true,364f,100,20);
+            Near(caption.localPosition.y,localPose.y+20,"Real native caption manual offset");
+            for(int frame=0;frame<25;frame++) Call(anchor,"TryRender",character,true,364f,100,20);
+            Check(header.GetComponentsInChildren(tmpType,true).Length==2,"Native caption is reused without per-frame clones");
+            Call(anchor,"TryRender",character,true,364f,300,0);
+            name.GetWorldCorners(corners); nativeTop=corners.Max(p=>p.y);
+            caption.GetWorldCorners(corners); Near(corners.Min(p=>p.y),nativeTop+4f*canvas.scaleFactor,"Large TMP caption grows away from the name");
+            Call(anchor,"Hide"); Check(!caption.gameObject.activeSelf,"Real native caption hides with display lifecycle");
+            Call(anchor,"TryRender",character,false,300f,100,-10);
+            health.GetWorldCorners(corners); float nativeBottom=corners.Min(p=>p.y);
+            caption.GetWorldCorners(corners); Near(corners.Max(p=>p.y),nativeBottom-14f*canvas.scaleFactor,"Other native caption stays below health with downward offset");
+            header.SetActive(false);
+            Check(!(bool)Call(anchor,"TryRender",character,true,300f,100,0) && !caption.gameObject.activeSelf,"Hidden real header hides its protection caption");
+            Call(anchor,"Dispose");
+            var widthPolicy=mod.GetType("ImprovedMagicShield.HudPolicy").GetMethod("Width",All);
+            foreach(float capacity in new[]{200f,365f,700f}) {
+                float previousWidth=float.PositiveInfinity;
+                foreach(int segment in new[]{50,72,73,100,200,500}) {
+                    float width=(float)widthPolicy.Invoke(null,new object[]{capacity,segment});
+                    Near(width,capacity/segment*32f,"Real production width follows segment scale");
+                    Check(width<previousWidth,"Real production width continues shrinking beyond 72"); previousWidth=width;
+                }
+            }
+        } finally {
+            singleton.SetValue(null,previous);
+            UnityEngine.Object.DestroyImmediate(header); UnityEngine.Object.DestroyImmediate(actor); UnityEngine.Object.DestroyImmediate(enemyRoot);
+            singleton.SetValue(null,previous);
+        }
     }
 
     private static void Visuals()

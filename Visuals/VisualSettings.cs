@@ -24,7 +24,8 @@ namespace ImprovedMagicShield.Visuals
         {
             const string section = "3 - Magic Shield";
             Enabled = config.Bind(section, "Magic Shield Effect", false,
-                "Customize shield appearance on this client. Off by default. Disable Magic shield in EffectsControl before enabling this setting. Controls are suspended while EffectsControl shield controls or SubtleShield are active. Turning this off restores the captured appearance; shield protection and the HUD are unaffected.");
+                new ConfigDescription("Customize shield appearance on this client. Off by default. Disable Magic shield in EffectsControl before enabling this setting. Controls are suspended while EffectsControl shield controls or SubtleShield are active. Turning this off restores the captured appearance; shield protection and the HUD are unaffected.", null,
+                    new ConfigurationManagerAttributes { Order = 100 }));
             Color = Integer(config, section, "Color", 269, 360, "Hue: 0/360 red, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta. Applied whenever Magic Shield Effect is enabled.");
             Glow = Integer(config, section, "Glow", 72, 100, "Bubble and particle glow. 100 is original brightness.");
             Light = Integer(config, section, "Light brightness", 35, 100, "Shield light intensity. 100 is original brightness; light range is unchanged.");
@@ -45,5 +46,11 @@ namespace ImprovedMagicShield.Visuals
                 ShieldOvality = Ovality.Value / 100f
             };
         }
+    }
+
+    // ConfigurationManager reads public tag fields by name; no runtime dependency is needed.
+    internal sealed class ConfigurationManagerAttributes
+    {
+        public int Order;
     }
 }

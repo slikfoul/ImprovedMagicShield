@@ -1,6 +1,6 @@
 {
   "name": "ImprovedMagicShield",
-  "version_number": "0.1.0",
+  "version_number": "0.3.1",
   "website_url": "https://github.com/slikfoul/ImprovedMagicShield",
   "description": "Refresh a magic shield when the new full protection is at least its remaining protection. Accepted casts restore full protection and duration; weaker casts leave the active shield unchanged.",
   "dependencies": ["denikson-BepInExPack_Valheim-5.4.2351"]
