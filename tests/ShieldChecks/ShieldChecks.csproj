@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <NuGetAudit>false</NuGetAudit>
+    <BepInExCore>$(APPDATA)\r2modmanPlus-local\Valheim\profiles\Default\BepInEx\core</BepInExCore>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../ShieldRefresh.cs" Link="ShieldRefresh.cs" />
+    <Compile Include="../../ShieldHooks.cs" Link="ShieldHooks.cs" />
+    <Compile Include="../../DisplayPolicy.cs" Link="DisplayPolicy.cs" />
+    <Compile Include="../../HudPolicy.cs" Link="HudPolicy.cs" />
+    <Compile Include="../../ShieldHud.cs" Link="ShieldHud.cs" />
+    <Compile Include="../../ShieldLabels.cs" Link="ShieldLabels.cs" />
+    <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>
+    <Reference Include="Mono.Cecil"><HintPath>$(BepInExCore)\Mono.Cecil.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
