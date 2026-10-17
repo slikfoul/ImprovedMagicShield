@@ -5,6 +5,12 @@ namespace ImprovedMagicShield
     internal static class DisplayPolicy
     {
         internal const double FreshSeconds = 2.0;
+        internal static float SnapshotAlpha(double activityAt, double now)
+        {
+            // Missing activity on older clients is not evidence of combat.
+            if (activityAt < 0.0 || activityAt > now + FreshSeconds || double.IsNaN(activityAt)) return 0f;
+            return HudPolicy.Alpha((float)System.Math.Max(0.0, now - activityAt));
+        }
         internal static bool IsFresh(float remaining, double sampledAt, double now, long publisher, long owner)
         {
             double age = now - sampledAt;

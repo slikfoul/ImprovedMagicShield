@@ -17,20 +17,8 @@ namespace ImprovedMagicShield
         private GuiBar slow;
         private TMP_Text text;
         private CanvasGroup visibility;
-        private SE_Shield observedShield;
-        private float previousAge, previousProtection, lastActivityAge;
-        private static Player threatenedPlayer;
-        private static uint threatVersion;
-        private uint previousThreat;
         private const float BorderWidth = 16f;
         private const float RowHeight = 192f;
-
-        internal static void ObserveThreat(Player player, bool alerted)
-        {
-            if (!alerted || player != Player.m_localPlayer) return;
-            threatenedPlayer = player;
-            unchecked { threatVersion++; }
-        }
 
         internal void Tick(bool enabled, int protectionPerSegment = 50)
         {
@@ -54,7 +42,7 @@ namespace ImprovedMagicShield
                     return;
                 }
             }
-            visibility.alpha = UpdateVisibility(player, shield, remaining);
+            visibility.alpha = HudPolicy.Alpha(ShieldActivity.QuietTime(player, shield, remaining));
             root.gameObject.SetActive(visibility.alpha > 0f);
             string display = HudPolicy.Text(remaining, capacity);
             float width = HudPolicy.Width(capacity, protectionPerSegment);
@@ -73,22 +61,6 @@ namespace ImprovedMagicShield
             fast.SetWidth(width);
             slow.SetWidth(width);
             fast.SetColor(new Color(0.68f, 0.35f, 0.90f, 1f));
-        }
-
-        private float UpdateVisibility(Player player, SE_Shield shield, float remaining)
-        {
-            float age = shield.GetDuration();
-            uint threat = threatenedPlayer == player ? threatVersion : 0;
-            // The same effect instance survives accepted recasts; its timer resets.
-            // A rejected weaker cast changes neither timer nor remaining protection.
-            if (!ReferenceEquals(observedShield, shield) || age < previousAge
-                || remaining < previousProtection || threat != previousThreat)
-                lastActivityAge = age;
-            observedShield = shield;
-            previousAge = age;
-            previousProtection = remaining;
-            previousThreat = threat;
-            return HudPolicy.Alpha(age - lastActivityAge);
         }
 
         private void Create(Hud hud)
@@ -161,10 +133,6 @@ namespace ImprovedMagicShield
         {
             if (root != null) { root.gameObject.SetActive(false); Object.Destroy(root.gameObject); }
             root = null; visual = null; fast = null; slow = null; text = null; visibility = null; owner = null;
-            observedShield = null;
-            previousAge = previousProtection = lastActivityAge = 0f;
-            previousThreat = threatVersion = 0;
-            threatenedPlayer = null;
         }
     }
 }

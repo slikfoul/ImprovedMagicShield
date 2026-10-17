@@ -11,6 +11,7 @@
     <Compile Include="../../DisplayPolicy.cs" Link="DisplayPolicy.cs" />
     <Compile Include="../../HudPolicy.cs" Link="HudPolicy.cs" />
     <Compile Include="../../ShieldHud.cs" Link="ShieldHud.cs" />
+    <Compile Include="../../ShieldActivity.cs" Link="ShieldActivity.cs" />
     <Compile Include="../../ShieldLabels.cs" Link="ShieldLabels.cs" />
     <Compile Include="../../ShieldLabelAnchor.cs" Link="ShieldLabelAnchor.cs" />
     <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>

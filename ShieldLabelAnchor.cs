@@ -19,6 +19,11 @@ namespace ImprovedMagicShield
         private TMP_Text label;
         internal bool HasNativeLabel { get { return label != null; } }
 
+        internal void SetAlpha(float alpha)
+        {
+            if (label != null) label.color = new Color(0.85f, 0.65f, 1f, alpha);
+        }
+
         internal void Hide()
         {
             if (label != null) label.gameObject.SetActive(false);

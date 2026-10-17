@@ -14,7 +14,7 @@ namespace ImprovedMagicShield
     {
         internal static void Postfix(Player __instance, bool alerted)
         {
-            if (Plugin.IsEnabled) ShieldHud.ObserveThreat(__instance, alerted);
+            if (Plugin.IsEnabled) ShieldActivity.ObserveThreat(__instance, alerted);
         }
     }
 

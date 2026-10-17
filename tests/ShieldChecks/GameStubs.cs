@@ -10,6 +10,8 @@ public static class Game { public static int m_worldLevel; }
 public class HitData { public short m_itemLevel; public float m_skillLevel; }
 public class Character
 {
+    public BaseAI AI;
+    public BaseAI GetBaseAI() { return AI; }
     public GameObject gameObject = new GameObject("Character");
     public static readonly List<Character> All = new List<Character>();
     public ZNetView View = new ZNetView();
@@ -25,6 +27,12 @@ public class Character
     public float GetRadius() { return 0.5f; }
     public bool IsDead() { return Dead; }
     public bool IsBoss() { return Boss; }
+}
+public class BaseAI
+{
+    public bool Alerted,Target;
+    public bool IsAlerted() { return Alerted; }
+    public bool HaveTarget() { return Target; }
 }
 public class EnemyHud
 {
@@ -344,7 +352,8 @@ namespace UnityEngine
         public static readonly List<string> Texts=new List<string>();
         public static int LastFontSize;
         public static Rect LastRect;
-        public static void Label(Rect r,string t,GUIStyle s) { Texts.Add(t); LastFontSize=s.fontSize; LastRect=r; }
+        public static Color LastColor;
+        public static void Label(Rect r,string t,GUIStyle s) { Texts.Add(t); LastFontSize=s.fontSize; LastRect=r; LastColor=color; }
     }
     public enum EventType { Layout,Repaint }
     public class Event { public static Event current=new Event(); public EventType type=EventType.Repaint; }

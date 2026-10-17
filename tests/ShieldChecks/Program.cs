@@ -24,6 +24,7 @@ internal static class Program
         HudChecks();
         HudLifecycleChecks();
         HudVisibilityChecks();
+        ActivityDisplayChecks();
         InstalledIlChecks(args[0], args[1]);
         Console.WriteLine("Passed " + checks + " automated checks: production refresh helpers, rejection state, disabled mode, labels/ZDO test doubles, installed-game IL and emitted replacement block. This is not live Unity or multiplayer testing.");
     }
@@ -117,7 +118,7 @@ internal static class Program
         void Tick() { Time.unscaledTime+=1; labels.Tick(true,true); }
         labels.Tick(true,false); Render(false);
         Check(GUI.Texts.Count==0,"Hidden label drawn.");
-        Check(local.View.Data.Writes==3 && character.View.Data.Writes==3,"Hidden labels stopped owner publication.");
+        Check(local.View.Data.Writes==4 && character.View.Data.Writes==4,"Hidden labels stopped owner publication.");
         Tick(); Render();
         Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="49" && GUI.LastFontSize==20,"Other label/local exclusion differs.");
         Check(local.View.Data.GetFloat("Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode(),-1)==300,"Excluded local player stopped publishing.");
@@ -161,18 +162,22 @@ internal static class Program
         nativeName.TestBounds=new Bounds { min=new Vector3(80,850,0),max=new Vector3(120,880,0) };
         nativeHealth.TestBounds=new Bounds { min=new Vector3(70,840,0),max=new Vector3(130,850,0) };
         EnemyHud.instance.Set(character,nativeRoot); Render();
-        Check(GUI.LastRect.y==244 && GUI.LastRect.x+GUI.LastRect.width/2==100,"Label does not sit below native name and health.");
-        Render(true,100,20); Check(GUI.LastRect.y==224,"Positive label offset does not move up.");
-        Render(true,100,-20); Check(GUI.LastRect.y==264,"Negative label offset does not move down.");
+        Check(GUI.LastRect.y==156 && GUI.LastRect.x+GUI.LastRect.width/2==100,"Player protection does not sit above the native name.");
+        var creature=new Character(); creature.Manager.Effect=shield;
+        Character.All.Add(creature); EnemyHud.instance.Set(creature,nativeRoot); Tick(); Render();
+        Check(GUI.LastRect.y==244,"Other creature protection no longer sits below the native name and health.");
+        Character.All.Remove(creature); Tick();
+        Render(true,100,20); Check(GUI.LastRect.y==136,"Positive label offset does not move up.");
+        Render(true,100,-20); Check(GUI.LastRect.y==176,"Negative label offset does not move down.");
         nativeCanvas.scaleFactor=2; Render(true,300);
-        Check(GUI.LastRect.y==248 && GUI.LastFontSize==60,"Large label or canvas scale grows over the native health bar.");
-        Render(true,100,20); Check(GUI.LastRect.y==208,"Manual label offset does not follow native canvas scaling.");
+        Check(GUI.LastRect.y==72 && GUI.LastFontSize==60,"Large player label or canvas scale grows over the native name.");
+        Render(true,100,20); Check(GUI.LastRect.y==112,"Manual label offset does not follow native canvas scaling.");
         nativeHealth.gameObject.SetActive(false); Render();
-        Check(GUI.LastRect.y==238,"Hidden health bar still affects placement below the visible name.");
+        Check(GUI.LastRect.y==152,"Hidden health bar changes above-name player placement.");
         nativeHealth.gameObject.SetActive(true); nativeName.gameObject.SetActive(false); Render();
-        Check(GUI.LastRect.y==248,"Visible health bar without name is not respected.");
+        Check(GUI.LastRect.y>800,"Hidden player name does not use the rendered-character fallback.");
         nativeHealth.TestBounds=new Bounds { min=new Vector3(170,810,0),max=new Vector3(230,820,0) }; Render();
-        Check(GUI.LastRect.y==278 && GUI.LastRect.x+GUI.LastRect.width/2==200,"Changed native header pose was not sampled in the current camera frame.");
+        Check(GUI.LastRect.y>800,"Moving health without a visible player name changes its fallback anchor.");
         nativeRoot.SetActive(false); Render();
         Check(GUI.LastRect.y>800 && GUI.Texts.Count==2,"Missing native header failed to use rendered-character fallback.");
         nativeRoot.SetActive(true); character.Boss=true; Render();
@@ -182,7 +187,7 @@ internal static class Program
         replacedName.SetParent(replacedRoot.transform,false);
         replacedName.TestBounds=new Bounds { min=new Vector3(280,700,0),max=new Vector3(320,720,0) };
         EnemyHud.instance.Set(character,replacedRoot); Render();
-        Check(GUI.LastRect.y==384 && GUI.LastRect.x+GUI.LastRect.width/2==300,"Recreated native header retains stale cached geometry.");
+        Check(GUI.LastRect.y==316 && GUI.LastRect.x+GUI.LastRect.width/2==300,"Recreated player header retains stale cached geometry.");
         var skeleton=new Character(); skeleton.gameObject.name="Skeleton_Friendly(Clone)"; skeleton.Manager.Effect=shield;
         Character.All.Add(skeleton); EnemyHud.instance.Set(skeleton,replacedRoot); Tick(); Render();
         Check(GUI.LastRect.y+GUI.LastRect.height==356 && GUI.LastRect.x+GUI.LastRect.width/2==300,"Summoned skeleton protection is not above its name.");
@@ -271,7 +276,7 @@ internal static class Program
             Check(method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="Internal_AddStatusEffect")
                 && method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="IsOwner"),"SEMan ownership/RPC convergence changed.");
         var modPlugin=mod.MainModule.Types.Single(t=>t.Name=="Plugin");
-        Check(mod.Name.Version.ToString(3)=="1.0.0","Built DLL version differs.");
+        Check(mod.Name.Version.ToString(3)=="1.1.1","Built DLL version differs.");
         var awake=modPlugin.Methods.Single(m=>m.Name=="Awake").Body.Instructions;
         int showIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show remaining protection"));
         int enabledIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Enabled"));
@@ -544,5 +549,57 @@ internal static class Program
         Check(root.gameObject.activeSelf && alpha.alpha==1,"A new shield inherits the old hidden state.");
         bar.Tick(false); Check(!root.gameObject.activeSelf,"Display toggle does not override an active fade.");
         bar.Destroy(); Hud.instance=null; Player.m_localPlayer=null;
+    }
+
+    private static void ActivityDisplayChecks()
+    {
+        ShieldActivity.Clear();
+        var viewer=new Player(); viewer.Manager.Effect=new SE_Shield(400,0) { Time=0,m_ttl=1000 };
+        var recipient=new Player(); var shield=new SE_Shield(500,200) { Time=0,m_ttl=1000,m_absorbDamage=500,m_absorbDamagePerSkillLevel=0 }; recipient.Manager.Effect=shield;
+        var skeleton=new Character(); skeleton.gameObject.name="Skeleton_Friendly(Clone)";
+        skeleton.AI=new BaseAI(); var skeletonShield=new SE_Shield(700,0) { Time=0,m_ttl=1000 }; skeleton.Manager.Effect=skeletonShield;
+        Character.All.Clear(); Character.All.Add(recipient); Character.All.Add(skeleton); Character.All.Add(viewer);
+        Hud.instance=new Hud(); EnemyHud.instance=null; Camera.main=new Camera(); ZNet.instance=new ZNet();
+        var ownerLabels=new ShieldLabels(); var viewerLabels=new ShieldLabels();
+        void Publish(float age,float recipientAge=-1)
+        {
+            shield.Time=recipientAge<0?age:recipientAge; skeletonShield.Time=age; ZNet.instance.Now=1000+age;
+            Player.m_localPlayer=recipient; recipient.View.Owner=skeleton.View.Owner=true; viewer.View.Owner=false;
+            Time.unscaledTime+=1; ownerLabels.Tick(true,false);
+            Player.m_localPlayer=viewer; recipient.View.Owner=skeleton.View.Owner=false; viewer.View.Owner=true;
+            Time.unscaledTime+=1; viewerLabels.Tick(true,true);
+        }
+        void Render()
+        {
+            Time.frameCount++; GUI.Texts.Clear(); GUI.color=Color.white; Event.current.type=EventType.Repaint;
+            viewerLabels.PrepareFrame(Camera.main,true); viewerLabels.Draw(100);
+        }
+        Publish(0); Render();
+        Check(GUI.Texts.Count==4 && GUI.Texts.Contains("300") && GUI.Texts.Contains("700"),"Fresh remote player/skeleton shields do not appear.");
+        Publish(10); Render(); Check(GUI.Texts.Count==0,"Quiet remote player or skeleton remains visible.");
+        ShieldThreatHook.Postfix(viewer,true); Publish(11); Render();
+        Check(GUI.Texts.Count==0,"The viewer entering combat reveals someone else's shield.");
+        var ownBar=new ShieldHud(); ownBar.Tick(true);
+        var ownRoot=Hud.instance.m_rootObject.transform.Children.Single(c=>c.gameObject.name=="ImprovedMagicShield.ResourceBar");
+        Check(ownRoot.gameObject.activeSelf && ownRoot.GetComponent<CanvasGroup>().alpha==1,"The viewer's own bar does not share its own activity.");
+        ownBar.Destroy(); Render(); Check(GUI.Texts.Count==0,"Destroying the local bar resets other characters' activity.");
+        Player.m_localPlayer=recipient; ShieldThreatHook.Postfix(recipient,true); Publish(12); Render();
+        Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="300","Recipient combat fails to reveal only that player's remote label.");
+        skeleton.AI.Target=true; Publish(13); Render();
+        Check(GUI.Texts.Count==2 && !GUI.Texts.Contains("700"),"Non-alerted skeleton target reveals its label.");
+        skeleton.AI.Alerted=true; Publish(14); Render();
+        Check(GUI.Texts.Count==4 && GUI.Texts.Contains("700"),"Skeleton's own combat does not reveal its shield.");
+        skeleton.AI.Alerted=skeleton.AI.Target=false; Publish(19.25f); Render();
+        Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="700" && Math.Abs(GUI.LastColor.a-0.5f)<0.002f,"Remote overhead text does not share the five-second/half-second fade.");
+        Publish(19.5f); Render(); Check(GUI.Texts.Count==0,"Remote overhead label does not finish fading.");
+        shield.Hit(10); Publish(20); Render();
+        Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="290","Remote shield damage does not reveal the current remaining protection.");
+        Check(ShieldRefresh.TryRefresh(shield,1,0),"Remote recast fixture rejected.");
+        Publish(21,0); Render(); Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="500","Remote accepted recast does not reveal full protection.");
+        recipient.View.Data.Set("Slikfoul.ImprovedMagicShield.ActivityTime".GetStableHashCode(),-1L); Render();
+        Check(GUI.Texts.Count==0,"Missing owner activity is replaced by the viewer's combat state.");
+        Check(DisplayPolicy.SnapshotAlpha(-0.001,100)==0 && DisplayPolicy.SnapshotAlpha(103,100)==0
+            && DisplayPolicy.SnapshotAlpha(100,105.25)==0.5f,"Missing/future activity or fractional fade differs.");
+        ownerLabels.Clear(); viewerLabels.Clear(); Character.All.Clear(); Player.m_localPlayer=null; Hud.instance=null;
     }
 }

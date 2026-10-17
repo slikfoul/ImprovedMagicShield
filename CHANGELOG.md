@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+- Initialize overhead labels at 80 percent size and a vertical offset of -20 HUD units.
+
+## 1.1.0
+- Show player protection above native player names, matching the summoned skeleton layout and vertical-offset controls.
+- Fade overhead protection with the shielded character's own casts, damage and combat activity, using the same five-second display and half-second fade as the local bar.
+
+## 1.0.1
+- Show player shield protection above native player names, using the same placement and vertical-offset controls as summoned skeletons.
+
 ## 1.0.0
 - Refresh a magic shield when the new cast's full protection is at least its remaining protection, restoring the new capacity and duration while preserving stronger active shields.
 - Display your remaining / maximum protection in a native-style purple resource bar, with capacity-based length, adjustable segment scale, a fixed HUD position and automatic fading outside combat.

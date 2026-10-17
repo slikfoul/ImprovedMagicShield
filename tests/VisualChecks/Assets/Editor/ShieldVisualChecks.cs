@@ -38,14 +38,14 @@ public static class ShieldVisualChecks
         bep.GetType("BepInEx.Paths").GetMethod("SetExecutablePath",All).Invoke(null,new object[]{Path.Combine(testRoot,"valheim.exe"),testRoot,managed,new[]{core,managed}});
         Assembly harmony = Assembly.LoadFrom(Path.Combine(core,"0Harmony.dll"));
         mod = Assembly.LoadFrom(Path.Combine(root,"bin","Release","ImprovedMagicShield.dll"));
-        Check(mod.GetName().Version == new Version(1,0,0,0), "Release assembly version");
+        Check(mod.GetName().Version == new Version(1,1,1,0), "Release assembly version");
         Check(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null, "Run with graphics initialized to exercise the real client controller");
         Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow();
         Type ht=harmony.GetType("HarmonyLib.Harmony"); object patcher=Activator.CreateInstance(ht,new object[]{"ImprovedMagicShield.VisualChecks"});
         try { ht.GetMethod("PatchAll",new[]{typeof(Assembly)}).Invoke(patcher,new object[]{mod}); Check(true,"All gameplay and visual Harmony hooks bind installed game signatures"); }
         finally { ht.GetMethod("UnpatchSelf").Invoke(patcher,null); }
-        string message="ImprovedMagicShield 1.0.0 Unity component checks passed: "+checks;
-        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.0.0.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
+        string message="ImprovedMagicShield 1.1.1 Unity component checks passed: "+checks;
+        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.1.1.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
     }
 
     private static void ConfigurationAndController()
@@ -272,6 +272,11 @@ public static class ShieldVisualChecks
             var caption=(RectTransform)header.transform.Find("ImprovedMagicShield.Protection");
             Check(caption!=null && caption.parent==header.transform,"Protection caption belongs to the native header canvas");
             Component captionText=caption.GetComponent(tmpType);
+            Color originalNameColor=(Color)nativeText.GetType().GetProperty("color").GetValue(nativeText,null);
+            Call(anchor,"SetAlpha",0.5f);
+            Near(((Color)captionText.GetType().GetProperty("color").GetValue(captionText,null)).a,0.5f,"Native protection caption applies the activity fade");
+            Check((Color)nativeText.GetType().GetProperty("color").GetValue(nativeText,null)==originalNameColor,"Protection fade leaves the native name color unchanged");
+            Call(anchor,"SetAlpha",1f);
             Check((string)captionText.GetType().GetProperty("text").GetValue(captionText,null)=="365","Real TMP caption receives remaining protection");
             name.GetWorldCorners(corners); float nativeTop=corners.Max(p=>p.y);
             caption.GetWorldCorners(corners); Near(corners.Min(p=>p.y),nativeTop+4f*canvas.scaleFactor,"Real native caption stays above the name without overlap");

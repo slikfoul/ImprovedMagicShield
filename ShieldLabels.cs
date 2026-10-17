@@ -8,6 +8,7 @@ namespace ImprovedMagicShield
         private static readonly int protectionKey = "Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode();
         private static readonly int sampleKey = "Slikfoul.ImprovedMagicShield.SampleTime".GetStableHashCode();
         private static readonly int publisherKey = "Slikfoul.ImprovedMagicShield.Publisher".GetStableHashCode();
+        private static readonly int activityKey = "Slikfoul.ImprovedMagicShield.ActivityTime".GetStableHashCode();
         private readonly HashSet<ZNetView> published = new HashSet<ZNetView>();
         private readonly List<Label> labels = new List<Label>();
         private readonly List<ScreenLabel> frameLabels = new List<ScreenLabel>();
@@ -57,13 +58,16 @@ namespace ImprovedMagicShield
                     remaining = localShield == null ? 0f : ShieldRefresh.Remaining(localShield);
                     if (remaining > 0f)
                     {
+                        long activity = (long)((now - ShieldActivity.QuietTime(character, localShield, remaining)) * 1000.0);
                         // Keep supplying authoritative values when only local labels are hidden.
                         if (!published.Contains(view) || zdo.GetFloat(protectionKey, 0f) != remaining
-                            || now - zdo.GetLong(sampleKey, 0L) / 1000.0 >= 0.5 || zdo.GetLong(publisherKey, 0L) != zdo.GetOwner())
+                            || now - zdo.GetLong(sampleKey, 0L) / 1000.0 >= 0.5 || zdo.GetLong(publisherKey, 0L) != zdo.GetOwner()
+                            || System.Math.Abs(zdo.GetLong(activityKey, -1L) - activity) >= 50L)
                         {
                             zdo.Set(protectionKey, remaining);
                             zdo.Set(sampleKey, (long)(now * 1000.0));
                             zdo.Set(publisherKey, zdo.GetOwner());
+                            zdo.Set(activityKey, activity);
                             published.Add(view);
                         }
                     }
@@ -95,6 +99,7 @@ namespace ImprovedMagicShield
                 if (view != null && view.IsValid() && view.IsOwner()) view.GetZDO().Set(protectionKey, 0f);
             published.Clear();
             nextTick = 0f;
+            ShieldActivity.Clear();
         }
 
         private void ClearFrame()
@@ -138,6 +143,19 @@ namespace ImprovedMagicShield
                 ZNet.instance.GetTimeSeconds(), zdo.GetLong(publisherKey, 0L), zdo.GetOwner());
         }
 
+        private static bool TryDisplay(Character character, out float remaining, out float alpha)
+        {
+            alpha = 0f;
+            if (!TryProtection(character, out remaining)) return false;
+            ZNetView view = character.GetComponent<ZNetView>();
+            if (view.IsOwner())
+                alpha = HudPolicy.Alpha(ShieldActivity.QuietTime(character, ShieldRefresh.FindShield(character), remaining));
+            else
+                alpha = DisplayPolicy.SnapshotAlpha(view.GetZDO().GetLong(activityKey, -1L) / 1000.0,
+                    ZNet.instance.GetTimeSeconds());
+            return true;
+        }
+
         // Called by the main camera immediately before culling, after camera/character LateUpdate.
         // The 10 Hz discovery/publication tick never samples world or screen coordinates.
         internal void PrepareFrame(Camera camera, bool show, int scale = 100, int verticalOffset = 0)
@@ -153,7 +171,7 @@ namespace ImprovedMagicShield
             preparedCamera = camera;
             foreach (Label label in labels)
             {
-                if (!TryProtection(label.Character, out float remaining)) { label.Anchor.Hide(); continue; }
+                if (!TryDisplay(label.Character, out float remaining, out float alpha) || alpha <= 0f) { label.Anchor.Hide(); continue; }
                 // GetTopPoint uses TransformPoint(capsule.center), not physics collider.bounds.
                 // Follow the rendered root, without animated head motion or added interpolation.
                 Vector3 position = label.Character.GetTopPoint() + Vector3.up * 0.3f;
@@ -161,9 +179,14 @@ namespace ImprovedMagicShield
                 Vector3 screen = camera.WorldToScreenPointScaled(position);
                 if (screen.z <= 0f || screen.x < 0f || screen.x > Screen.width || screen.y < 0f || screen.y > Screen.height) { label.Anchor.Hide(); continue; }
                 float gap = 8f;
-                bool aboveName = !(label.Character is Player) && label.Character.gameObject.name.StartsWith("Skeleton_Friendly", System.StringComparison.Ordinal);
-                if (label.Anchor.TryRender(label.Character, aboveName, remaining, scale, verticalOffset)
-                    || label.Anchor.HasNativeLabel) continue;
+                bool aboveName = label.Character is Player
+                    || label.Character.gameObject.name.StartsWith("Skeleton_Friendly", System.StringComparison.Ordinal);
+                if (label.Anchor.TryRender(label.Character, aboveName, remaining, scale, verticalOffset))
+                {
+                    label.Anchor.SetAlpha(alpha);
+                    continue;
+                }
+                if (label.Anchor.HasNativeLabel) continue;
                 Vector2 edge;
                 float uiScale = 1f;
                 bool nativeAnchor = aboveName
@@ -172,7 +195,7 @@ namespace ImprovedMagicShield
                 if (nativeAnchor)
                 {
                     // This is the actual current native name/health header position. Its
-                    // bottom edge is authoritative even if its camera update differs from ours.
+                    // selected edge is authoritative even if its camera update differs from ours.
                     screen.x = edge.x; screen.y = edge.y;
                     gap = 4f * uiScale;
                 }
@@ -191,18 +214,18 @@ namespace ImprovedMagicShield
             {
                 foreach (ScreenLabel item in frameLabels)
                 {
-                    if (!TryProtection(item.Label.Character, out float remaining)) continue;
+                    if (!TryDisplay(item.Label.Character, out float remaining, out float alpha) || alpha <= 0f) continue;
                     Vector3 screen = item.Position;
                     string text = DisplayPolicy.WholeProtection(remaining).ToString();
                     float width = style.CalcSize(new GUIContent(text)).x + 12f;
                     float height = style.fontSize * 2f;
-                    // Skeleton labels grow upward away from the name; other labels grow
+                    // Player/skeleton labels grow upward away from the name; other labels grow
                     // downward away from the health block. Positive manual offset means up.
                     float y = Screen.height - screen.y + (item.AboveName ? -item.Gap - height : item.Gap);
                     y -= verticalOffset * item.UiScale;
                     Rect rect = new Rect(screen.x - width / 2f, y, width, height);
                     style.normal.textColor = Color.black;
-                    GUI.color = previous;
+                    GUI.color = new Color(previous.r, previous.g, previous.b, previous.a * alpha);
                     GUI.Label(new Rect(rect.x + 1f, rect.y + 1f, width, height), text, style);
                     style.normal.textColor = new Color(0.85f, 0.65f, 1f);
                     GUI.Label(rect, text, style);
