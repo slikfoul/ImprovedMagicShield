@@ -28,3 +28,4 @@ tests/VisualChecks/ProjectSettings/*
 /LOCAL-BUILD-STATUS.md
 /BuildReviewArchive.ps1
 /VerifyInstallation.ps1
+/assets/icon-generation.md
