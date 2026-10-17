@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0
+- Customize shield color, glow, light brightness, opacity and ovality with a separate Magic Shield Effect switch, disabled by default.
+- Use local visual settings for existing and newly created shield effects, with restoration when disabled and automatic suspension while other shield visual controls are active.
+
+## 0.0.3
+- Show overhead protection only on other characters, independently of the local shield bar.
+- Anchor overhead labels to the rendered character and the current main-camera frame.
+
+## 0.0.2
+- Display the local shield bar using Valheim's native resource sprites, frame, fill and typography.
+
 ## 0.0.1
 - Compare the new shield's full protection with the active shield's remaining protection.
 - Restore full new protection and duration on accepted casts, including equal protection.

@@ -1,6 +1,8 @@
 // Managed test doubles only. They do not execute Unity, network replication or the game.
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace ImprovedMagicShield { internal static class Plugin { internal static bool IsEnabled = true; } }
@@ -12,10 +14,13 @@ public class Character
     public ZNetView View = new ZNetView();
     public SEMan Manager = new SEMan();
     public bool Dead;
+    public Vector3 RenderedTop = new Vector3(0,2,0), PhysicsCenter;
+    public int PhysicsReads;
     public T GetComponent<T>() where T : class { return View as T; }
     public SEMan GetSEMan() { return Manager; }
     public static List<Character> GetAllCharacters() { return All; }
-    public Vector3 GetCenterPoint() { return new Vector3(); }
+    public Vector3 GetCenterPoint() { PhysicsReads++; return PhysicsCenter; }
+    public Vector3 GetTopPoint() { return RenderedTop; }
     public float GetRadius() { return 0.5f; }
     public bool IsDead() { return Dead; }
 }
@@ -34,9 +39,50 @@ public class Hud
     public RectTransform m_staminaBar2Root=(RectTransform)new GameObject("Stamina",typeof(RectTransform)).transform;
     public RectTransform m_eitrBarRoot=(RectTransform)new GameObject("Eitr",typeof(RectTransform)).transform;
     public RectTransform m_adrenalineBarRoot=(RectTransform)new GameObject("Adrenaline",typeof(RectTransform)).transform;
-    public TMPro.TMP_Text m_staminaText=new TMPro.TMP_Text();
+    public TMPro.TMP_Text m_staminaText;
+    public TMPro.TMP_Text m_eitrText;
+    public GuiBar m_eitrBarFast,m_eitrBarSlow;
+    public Hud()
+    {
+        foreach (var panel in new[] {m_staminaBar2Root,m_eitrBarRoot,m_adrenalineBarRoot})
+        {
+            panel.SetParent(m_rootObject.transform,false);
+            panel.sizeDelta=new Vector2(180,32);
+        }
+        m_eitrBarRoot.gameObject.AddComponent<Animator>();
+        var body=(RectTransform)new GameObject("Stamina",typeof(RectTransform)).transform;
+        body.SetParent(m_eitrBarRoot,false); body.anchorMax=Vector2.one; body.sizeDelta=new Vector2(-16,-16);
+        body.TestBounds=new Bounds { min=new Vector3(-82,31,0),max=new Vector3(82,47,0),center=new Vector3(0,39,0) };
+        body.gameObject.AddComponent<NativeResourceUpdater>();
+        var bg=new GameObject("Background",typeof(RectTransform)); bg.transform.SetParent(body,false);
+        bg.AddComponent<UnityEngine.UI.Image>().sprite=new Sprite { name="native-frame" };
+        m_eitrBarSlow=Bar("eitr_slow",body,true); m_eitrBarFast=Bar("eitr_fast",body,false);
+        var label=new GameObject("EitrText",typeof(RectTransform)); label.transform.SetParent(body,false);
+        m_eitrText=label.AddComponent<TMPro.TMP_Text>(); m_eitrText.fontSize=12.9f;
+        m_eitrText.font=new UnityEngine.Object { name="native-font" }; m_eitrText.fontSharedMaterial=new UnityEngine.Object { name="native-font-material" };
+        m_staminaText=m_eitrText;
+    }
+    private static GuiBar Bar(string name,Transform parent,bool smooth)
+    {
+        var obj=new GameObject(name,typeof(RectTransform)); obj.transform.SetParent(parent,false);
+        var bar=obj.AddComponent<GuiBar>(); bar.m_smoothDrain=smooth;
+        var fill=new GameObject("bar",typeof(RectTransform)); fill.transform.SetParent(obj.transform,false);
+        bar.m_bar=(RectTransform)fill.transform; bar.m_bar.sizeDelta=new Vector2(164,16);
+        var image=fill.AddComponent<UnityEngine.UI.Image>(); image.sprite=new Sprite { name="native-resource-fill" }; image.type=UnityEngine.UI.Image.Type.Tiled;
+        return bar;
+    }
     public bool IsVisible() { return Visible; }
 }
+public class GuiBar : Behaviour
+{
+    public RectTransform m_bar; public bool m_smoothDrain,m_smoothFill;
+    public float Value=1f,Width,Max=1f;
+    public void SetValue(float value) { Value=value; }
+    public void SetWidth(float width) { Width=width; }
+    public void SetMaxValue(float max) { Max=max; }
+    public void SetColor(Color color) { m_bar.GetComponent<UnityEngine.UI.Image>().color=color; }
+}
+public class NativeResourceUpdater : Behaviour {}
 public class StatusEffect
 {
     public float m_ttl = 60f;
@@ -104,9 +150,20 @@ public static class HashStub
 {
     public static int GetStableHashCode(this string value) { unchecked { int hash = 17; foreach (char c in value) hash = hash * 31 + c; return hash; } }
 }
+public static class Utils
+{
+    public static Camera GetMainCamera() { return Camera.main; }
+    public static Vector3 WorldToScreenPointScaled(this Camera camera,Vector3 world)
+    {
+        Vector3 result=camera.WorldToScreenPoint(world);
+        result.x*=Screen.width/(float)camera.pixelWidth;
+        result.y*=Screen.height/(float)camera.pixelHeight;
+        return result;
+    }
+}
 namespace UnityEngine
 {
-    public static class Time { public static float unscaledTime; }
+    public static class Time { public static float unscaledTime; public static int frameCount; }
     public struct Vector3
     {
         public float x,y,z;
@@ -120,28 +177,74 @@ namespace UnityEngine
     }
     public class Object
     {
+        public string name;
         public static void Destroy(GameObject obj) { obj.Destroyed=true; }
-        public static TMPro.TMP_Text Instantiate(TMPro.TMP_Text source,Transform parent)
+        public static GameObject Instantiate(GameObject source,Transform parent,bool world)
         {
-            var text=new TMPro.TMP_Text(); text.rectTransform.SetParent(parent,false); return text;
+            var objects=new Dictionary<Object,Object>();
+            GameObject Clone(GameObject original,Transform newParent)
+            {
+                var copy=new GameObject(original.name,typeof(RectTransform)); copy.activeSelf=original.activeSelf;
+                copy.transform.SetParent(newParent,false); objects[original]=copy; objects[original.transform]=copy.transform;
+                foreach (var component in original.Components.Values.OfType<Component>())
+                {
+                    var clone=(Component)Activator.CreateInstance(component.GetType()); clone.gameObject=copy;
+                    copy.Components[component.GetType()]=clone; objects[component]=clone;
+                }
+                foreach (Transform child in original.transform.Children) Clone(child.gameObject,copy.transform);
+                return copy;
+            }
+            var result=Clone(source,parent);
+            foreach (var pair in objects)
+            {
+                if (pair.Key is GameObject) continue;
+                foreach (var field in pair.Key.GetType().GetFields(BindingFlags.Instance|BindingFlags.Public))
+                {
+                    if (field.Name=="gameObject" || field.Name=="parent" || field.Name=="Children") continue;
+                    object value=field.GetValue(pair.Key);
+                    if (value is Object original && objects.TryGetValue(original,out Object clone)) value=clone;
+                    field.SetValue(pair.Value,value);
+                }
+            }
+            return result;
         }
     }
+    public class Component : Object
+    {
+        public GameObject gameObject;
+        public Transform transform { get { return gameObject.transform; } }
+        public T GetComponent<T>() { return gameObject.GetComponent<T>(); }
+        public T[] GetComponentsInChildren<T>(bool inactive) { return gameObject.GetComponentsInChildren<T>(inactive); }
+    }
+    public class Behaviour : Component { public bool enabled=true; }
+    public class Animator : Behaviour {}
+    public class Sprite : Object {}
+    public static class Debug { public static readonly List<string> Warnings=new List<string>(); public static void LogWarning(string text) { Warnings.Add(text); } }
     public class GameObject : Object
     {
-        public string name; public bool activeSelf=true,Destroyed;
+        public bool activeSelf=true,Destroyed;
         public Transform transform;
         public readonly Dictionary<Type,object> Components=new Dictionary<Type,object>();
         public GameObject(string n,params Type[] types) { name=n; transform=Array.IndexOf(types,typeof(RectTransform))>=0 ? new RectTransform() : new Transform(); transform.gameObject=this; }
-        public T AddComponent<T>() where T : new() { var result=new T(); Components[typeof(T)]=result; return result; }
+        public T AddComponent<T>() where T : new() { var result=new T(); if (result is Component component) component.gameObject=this; Components[typeof(T)]=result; return result; }
+        public T GetComponent<T>() { if (transform is T t) return t; return Components.Values.OfType<T>().FirstOrDefault(); }
+        public T[] GetComponentsInChildren<T>(bool inactive)
+        {
+            var result=Components.Values.OfType<T>().ToList();
+            foreach (Transform child in transform.Children) if (inactive || child.gameObject.activeSelf) result.AddRange(child.gameObject.GetComponentsInChildren<T>(inactive));
+            return result.ToArray();
+        }
         public void SetActive(bool active) { activeSelf=active; }
     }
-    public class Transform
+    public class Transform : Component
     {
         public Vector3 position,localPosition,localScale=Vector3.one;
-        public GameObject gameObject;
         public Transform parent;
         public readonly List<Transform> Children=new List<Transform>();
         public void SetParent(Transform p,bool world) { parent=p; p.Children.Add(this); }
+        public bool IsChildOf(Transform ancestor) { for(Transform current=this;current!=null;current=current.parent) if(current==ancestor)return true; return false; }
+        public int GetSiblingIndex() { return parent.Children.IndexOf(this); }
+        public Transform GetChild(int index) { return Children[index]; }
     }
     public struct Vector2
     {
@@ -152,10 +255,21 @@ namespace UnityEngine
     }
     public class RectTransform : Transform
     {
+        public enum Axis { Horizontal,Vertical }
         public Vector2 anchorMin,anchorMax,pivot,sizeDelta,offsetMin,offsetMax;
         public Bounds TestBounds;
+        public Rect rect
+        {
+            get { var parentRect=parent as RectTransform; return new Rect(0,0,sizeDelta.x+(parentRect==null?0:(anchorMax.x-anchorMin.x)*parentRect.rect.width),sizeDelta.y+(parentRect==null?0:(anchorMax.y-anchorMin.y)*parentRect.rect.height)); }
+        }
+        public void SetSizeWithCurrentAnchors(Axis axis,float size)
+        {
+            var parentRect=parent as RectTransform;
+            if(axis==Axis.Horizontal) sizeDelta.x=size-(parentRect==null?0:(anchorMax.x-anchorMin.x)*parentRect.rect.width);
+            else sizeDelta.y=size-(parentRect==null?0:(anchorMax.y-anchorMin.y)*parentRect.rect.height);
+        }
     }
-    public struct Bounds { public Vector3 center,max; }
+    public struct Bounds { public Vector3 center,min,max; }
     public static class RectTransformUtility
     {
         public static Bounds CalculateRelativeRectTransformBounds(Transform parent,RectTransform rect) { return rect.TestBounds; }
@@ -164,7 +278,9 @@ namespace UnityEngine
     {
         public static Camera main = new Camera();
         public Transform transform = new Transform();
-        public Vector3 WorldToScreenPoint(Vector3 p) { return new Vector3 { x=100,y=100,z=1 }; }
+        public int pixelWidth=1920,pixelHeight=1080,Projections;
+        public bool Behind;
+        public Vector3 WorldToScreenPoint(Vector3 p) { Projections++; return new Vector3(100+p.x-transform.position.x,100+p.y-transform.position.y,Behind?-1:1); }
     }
     public static class Screen { public static int width=1920,height=1080; }
     public struct Color
@@ -194,8 +310,11 @@ namespace UnityEngine
         public static GUISkin skin=new GUISkin(); public static Color color;
         public static readonly List<string> Texts=new List<string>();
         public static int LastFontSize;
-        public static void Label(Rect r,string t,GUIStyle s) { Texts.Add(t); LastFontSize=s.fontSize; }
+        public static Rect LastRect;
+        public static void Label(Rect r,string t,GUIStyle s) { Texts.Add(t); LastFontSize=s.fontSize; LastRect=r; }
     }
+    public enum EventType { Layout,Repaint }
+    public class Event { public static Event current=new Event(); public EventType type=EventType.Repaint; }
     public static class Mathf
     {
         public static int RoundToInt(float f) { return (int)Math.Round(f); }
@@ -205,16 +324,17 @@ namespace UnityEngine
 }
 namespace UnityEngine.UI
 {
-    public class Image { public UnityEngine.Color color; public bool raycastTarget; }
+    public class Graphic : UnityEngine.Behaviour { public UnityEngine.Color color; public bool raycastTarget; }
+    public class Image : Graphic { public enum Type { Simple,Sliced,Tiled }; public UnityEngine.Sprite sprite; public Type type; }
 }
 namespace TMPro
 {
     public enum TextAlignmentOptions { Center }
-    public class TMP_Text : UnityEngine.Object
+    public class TMP_Text : UnityEngine.UI.Graphic
     {
-        public string name,text; public bool enableAutoSizing,raycastTarget; public float fontSize;
-        public UnityEngine.Color color; public TextAlignmentOptions alignment;
-        public UnityEngine.GameObject gameObject=new UnityEngine.GameObject("Text",typeof(UnityEngine.RectTransform));
+        public string text; public bool enableAutoSizing; public float fontSize;
+        public UnityEngine.Object font,fontSharedMaterial; public TextAlignmentOptions alignment;
         public UnityEngine.RectTransform rectTransform { get { return (UnityEngine.RectTransform)gameObject.transform; } }
+        public UnityEngine.Vector2 GetPreferredValues(string value) { return new UnityEngine.Vector2(value.Length*fontSize*0.5f,16); }
     }
 }

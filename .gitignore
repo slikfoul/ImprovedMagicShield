@@ -5,6 +5,14 @@ backups/
 research/
 tests/**/bin/
 tests/**/obj/
+tests/VisualChecks/Library/
+tests/VisualChecks/Temp/
+tests/VisualChecks/Logs/
+tests/VisualChecks/UserSettings/
+tests/VisualChecks/obj/
+tests/VisualChecks/*.cfg
+tests/VisualChecks/ProjectSettings/*
+!tests/VisualChecks/ProjectSettings/ProjectVersion.txt
 *.dll
 *.zip
 *.pdb

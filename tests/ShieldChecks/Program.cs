@@ -102,28 +102,83 @@ internal static class Program
         Check(!DisplayPolicy.IsFresh(50,100,101,10,11),"Previous owner snapshot accepted.");
         Check(!DisplayPolicy.IsFresh(float.NaN,100,100,10,10) && !DisplayPolicy.IsFresh(float.PositiveInfinity,100,100,10,10),"Invalid snapshot accepted.");
         Check(DisplayPolicy.WholeProtection(99.9f)==99 && DisplayPolicy.WholeProtection(-3)==0,"Label rounding differs.");
-        var character = new Character(); var shield = new SE_Shield(500,450.1f);
-        character.Manager.Effect=shield; Character.All.Clear(); Character.All.Add(character);
-        var labels = new ShieldLabels(); Time.unscaledTime=1; ZNet.instance.Now=100;
-        labels.Tick(true,false); GUI.Texts.Clear(); labels.Draw(100);
-        Check(GUI.Texts.Count==0,"Hidden label was drawn.");
-        Check(character.View.Data.Writes==3,"Hidden local label stopped supplying remote data.");
-        Time.unscaledTime+=1; labels.Tick(true,true); labels.Draw(100);
-        Check(GUI.Texts.Last()=="Shield: 49" && GUI.LastFontSize==20,"Label does not show actual remaining protection.");
-        shield.Hit(30); GUI.Texts.Clear(); labels.Draw(200);
-        Check(GUI.Texts.Last()=="Shield: 19" && GUI.LastFontSize==40,"Local damage/scale did not update label.");
-        Time.unscaledTime+=1; ZNet.instance.Now+=0.5; labels.Tick(true,true);
-        character.View.Owner=false; Time.unscaledTime+=1; labels.Tick(true,true);
-        GUI.Texts.Clear(); labels.Draw(100);
-        Check(GUI.Texts.Last()=="Shield: 19","Remote snapshot was not read.");
-        character.View.Data.Owner=11; Time.unscaledTime+=1; labels.Tick(true,true); GUI.Texts.Clear(); labels.Draw(100);
-        Check(GUI.Texts.Count==0,"Ownership change retained stale label.");
-        character.View.Data.Owner=10; ZNet.instance.Now+=3; Time.unscaledTime+=1; labels.Tick(true,true); GUI.Texts.Clear(); labels.Draw(100);
-        Check(GUI.Texts.Count==0,"Expired remote label was drawn.");
-        character.View.Owner=true; Time.unscaledTime+=1; labels.Tick(true,true); labels.Tick(false,true); GUI.Texts.Clear(); labels.Draw(100);
-        Check(GUI.Texts.Count==0 && character.Manager.Effect==shield && shield.Absorbed==480.1f,"Disabling labels changed active shield.");
-        Check(character.View.Data.GetFloat("Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode(),-1)==0,"Disabled owner left advertised shield protection.");
-        Character.All.Clear(); labels.Clear();
+        var local=new Player(); Player.m_localPlayer=local; Hud.instance=new Hud();
+        var character=new Player(); var shield=new SE_Shield(500,450.1f);
+        character.Manager.Effect=shield; local.Manager.Effect=new SE_Shield(500,200);
+        Character.All.Clear(); Character.All.Add(character); Character.All.Add(local);
+        Camera.main=new Camera(); var camera=Camera.main;
+        var labels=new ShieldLabels(); Time.unscaledTime=1; ZNet.instance.Now=100;
+        void Render(bool show=true,int scale=100)
+        {
+            Time.frameCount++; GUI.Texts.Clear(); Event.current.type=EventType.Repaint;
+            labels.PrepareFrame(camera,show); labels.Draw(scale);
+        }
+        void Tick() { Time.unscaledTime+=1; labels.Tick(true,true); }
+        labels.Tick(true,false); Render(false);
+        Check(GUI.Texts.Count==0,"Hidden label drawn.");
+        Check(local.View.Data.Writes==3 && character.View.Data.Writes==3,"Hidden labels stopped owner publication.");
+        Tick(); Render();
+        Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="Shield: 49" && GUI.LastFontSize==20,"Other label/local exclusion differs.");
+        Check(local.View.Data.GetFloat("Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode(),-1)==300,"Excluded local player stopped publishing.");
+        var localBar=new ShieldHud();
+        foreach(bool showBar in new[]{true,false})
+        {
+            localBar.Tick(showBar); Render();
+            Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="Shield: 49","Own overhead label depends on the lower-bar toggle.");
+        }
+        localBar.Destroy();
+        shield.Hit(30); Render(true,200);
+        Check(GUI.Texts.Last()=="Shield: 19" && GUI.LastFontSize==40,"Damage/scale did not update before tick.");
+        Render(); float x=GUI.LastRect.x,y=GUI.LastRect.y;
+        character.RenderedTop=new Vector3(5,4,0); character.PhysicsCenter=new Vector3(-100,100,0); Render();
+        Check(GUI.LastRect.x==x+5 && GUI.LastRect.y==y-2 && character.PhysicsReads==0,"Label did not follow rendered anchor independently of physics and tick.");
+        camera.transform.position=new Vector3(2,1,0); Render();
+        Check(GUI.LastRect.x==x+3 && GUI.LastRect.y==y-1,"Projection missed current camera pose.");
+        x=GUI.LastRect.x; int projections=camera.Projections;
+        character.RenderedTop=new Vector3(12,4,0); camera.transform.position=new Vector3(9,1,0);
+        GUI.Texts.Clear(); Event.current.type=EventType.Layout; labels.Draw(100);
+        Check(GUI.Texts.Count==0 && camera.Projections==projections,"Layout rendered or reprojected label.");
+        Event.current.type=EventType.Repaint; labels.Draw(100);
+        Check(GUI.LastRect.x==x && camera.Projections==projections,"GUI changed the prepared pose.");
+        Time.frameCount++; GUI.Texts.Clear(); labels.Draw(100);
+        Check(GUI.Texts.Count==0,"Previous-frame position reused.");
+        labels.PrepareFrame(new Camera(),true); labels.Draw(100);
+        Check(GUI.Texts.Count==0,"Secondary camera supplied frame.");
+        Render(); x=GUI.LastRect.x; labels.PrepareFrame(new Camera(),true); GUI.Texts.Clear(); labels.Draw(100);
+        Check(GUI.Texts.Count==2 && GUI.LastRect.x==x,"Secondary camera replaced main-camera frame.");
+        camera.pixelWidth=Screen.width/2; camera.pixelHeight=Screen.height/2; Render();
+        Check(Math.Abs(GUI.LastRect.x+GUI.LastRect.width/2-206)<0.01f,"Projection did not scale to screen size.");
+        camera.pixelWidth=Screen.width; camera.pixelHeight=Screen.height;
+        character.RenderedTop=new Vector3(100,2,0); Render(); Check(GUI.Texts.Count==0,"Distant label drawn.");
+        character.RenderedTop=new Vector3(0,2,0); camera.transform.position=new Vector3();
+        camera.Behind=true; Render(); Check(GUI.Texts.Count==0,"Behind-camera label drawn."); camera.Behind=false;
+        character.Dead=true; Render(); Check(GUI.Texts.Count==0,"Dead label drawn."); character.Dead=false;
+        character.Teleporting=true; Render(); Check(GUI.Texts.Count==0,"Teleporting label drawn."); character.Teleporting=false;
+        character.View.Valid=false; Render(); Check(GUI.Texts.Count==0,"Invalid view label drawn."); character.View.Valid=true;
+        character.Manager.Effect=null; Render(); Check(GUI.Texts.Count==0,"Removed effect left label before tick."); character.Manager.Effect=shield;
+        foreach(int state in new[]{0,1,2,3})
+        {
+            local.Dead=state==0; local.Teleporting=state==1; local.Cutscene=state==2; Hud.instance.Visible=state!=3;
+            Render(); Check(GUI.Texts.Count==0,"Local visibility lifecycle left labels.");
+        }
+        local.Dead=false; local.Teleporting=false; local.Cutscene=false; Hud.instance.Visible=true;
+        Render(); Check(GUI.Texts.Count==2,"Labels did not recover after hide.");
+        Player.m_localPlayer=character; Render(); Check(GUI.Texts.Count==0,"Changed local player retained own label."); Player.m_localPlayer=local;
+        ZNet.instance.Now+=0.5; Tick(); character.View.Owner=false; Render();
+        Check(GUI.Texts.Last()=="Shield: 19","Remote snapshot not read after ownership transfer.");
+        character.View.Data.Owner=11; Render(); Check(GUI.Texts.Count==0,"Old owner accepted between ticks.");
+        character.View.Data.Owner=10; Render(); Check(GUI.Texts.Count==2,"Fresh remote snapshot rejected.");
+        character.View.Data.Owner=11; GUI.Texts.Clear(); labels.Draw(100);
+        Check(GUI.Texts.Count==0,"Owner change after projection retained label."); character.View.Data.Owner=10;
+        ZNet.instance.Now+=3; Render(); Check(GUI.Texts.Count==0,"Expired snapshot drawn between ticks.");
+        character.View.Owner=true; Tick(); Render(false); GUI.Texts.Clear(); labels.Draw(100);
+        Check(GUI.Texts.Count==0,"Hidden labels retained prepared frame.");
+        labels.Tick(false,true); Render();
+        Check(GUI.Texts.Count==0 && character.Manager.Effect==shield && shield.Absorbed==480.1f,"Disabled labels changed active shield.");
+        Check(character.View.Data.GetFloat("Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode(),-1)==0,"Disabled owner left advertised shield.");
+        Tick(); Render(); labels.Clear(); GUI.Texts.Clear(); labels.Draw(100);
+        Check(GUI.Texts.Count==0,"Cleanup retained label.");
+        Character.All.Clear(); Player.m_localPlayer=null; Hud.instance=null;
     }
 
     private static void InstalledIlChecks(string gamePath,string modPath)
@@ -158,7 +213,7 @@ internal static class Program
             Check(method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="Internal_AddStatusEffect")
                 && method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="IsOwner"),"SEMan ownership/RPC convergence changed.");
         var modPlugin=mod.MainModule.Types.Single(t=>t.Name=="Plugin");
-        Check(mod.Name.Version.ToString(3)=="0.0.1","Built DLL version differs.");
+        Check(mod.Name.Version.ToString(3)=="0.1.0","Built DLL version differs.");
         var awake=modPlugin.Methods.Single(m=>m.Name=="Awake").Body.Instructions;
         int showIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show remaining protection"));
         int enabledIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Enabled"));
@@ -166,6 +221,23 @@ internal static class Program
         Check(showIndex>=0 && awake[showIndex+1].OpCode.Code==Code.Ldc_I4_0,"Label default must be off.");
         Check(enabledIndex>=0 && awake[enabledIndex+1].OpCode.Code==Code.Ldc_I4_1,"Mechanics default must be on.");
         Check(hudIndex>=0 && awake[hudIndex+1].OpCode.Code==Code.Ldc_I4_1,"Local HUD default must be on.");
+        var top=character.Methods.Single(m=>m.Name=="GetTopPoint").Body.Instructions;
+        Check(top.Any(i=>i.Operand is MethodReference m && m.Name=="TransformPoint")
+            && !top.Any(i=>i.Operand is MethodReference m && m.Name=="get_bounds"),"Installed visual anchor changed to physics bounds.");
+        var cameraLate=Type("GameCamera").Methods.Single(m=>m.Name=="LateUpdate").Body.Instructions;
+        Check(cameraLate.Any(i=>i.Operand is MethodReference m && m.Name=="UpdateCamera"),"Installed camera update stage changed.");
+        var renderer=mod.MainModule.Types.Single(t=>t.Name=="ShieldLabels");
+        var prepare=renderer.Methods.Single(m=>m.Name=="PrepareFrame").Body.Instructions;
+        var draw=renderer.Methods.Single(m=>m.Name=="Draw").Body.Instructions;
+        Check(prepare.Any(i=>i.Operand is MethodReference m && m.Name=="GetTopPoint")
+            && prepare.Any(i=>i.Operand is MethodReference m && m.Name=="WorldToScreenPointScaled")
+            && !renderer.Methods.Where(m=>m.HasBody).SelectMany(m=>m.Body.Instructions).Any(i=>i.Operand is MethodReference m && m.Name=="GetCenterPoint"),"Compiled labels do not use the rendered anchor/native screen projection.");
+        Check(!draw.Any(i=>i.Operand is MethodReference m && (m.Name=="GetTopPoint" || m.Name.Contains("WorldToScreenPoint"))),"GUI projects a different pose from the camera frame.");
+        var destroy=modPlugin.Methods.Single(m=>m.Name=="OnDestroy").Body.Instructions;
+        Check(awake.Any(i=>i.Operand is FieldReference f && f.Name=="onPreCull")
+            && destroy.Any(i=>i.Operand is FieldReference f && f.Name=="onPreCull")
+            && destroy.Any(i=>i.Operand is MethodReference m && m.Name=="Remove" && m.DeclaringType.Name=="Delegate"),"Camera callback subscription/cleanup missing.");
+        Check(modPlugin.Methods.Single(m=>m.Name=="PrepareLabels").Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="PrepareFrame"),"Camera callback does not prepare labels.");
         var dynamic=new DynamicMethod("InstalledBlock",typeof(void),new[] {typeof(StatusEffect),typeof(HitData),typeof(Character)},typeof(Program).Module,true);
         var generator=dynamic.GetILGenerator();
         var locals=rpc.Body.Variables.ToDictionary(v=>v.Index,v=>generator.DeclareLocal(v.VariableType.FullName=="StatusEffect" ? typeof(StatusEffect) : typeof(object)));
@@ -276,18 +348,30 @@ internal static class Program
         hud.m_adrenalineBarRoot.TestBounds=new Bounds { max=new Vector3(150,-320,0) };
         var player=new Player(); Player.m_localPlayer=player; var shield=new SE_Shield(500,250); player.Manager.Effect=shield;
         var bar=new ShieldHud(); bar.Tick(true);
-        var root=(RectTransform)hud.m_rootObject.transform.Children.Single();
+        var root=(RectTransform)hud.m_rootObject.transform.Children.Single(c=>c.gameObject.name=="ImprovedMagicShield.ResourceBar");
         Check(root.gameObject.activeSelf && root.parent==hud.m_rootObject.transform,"HUD is not attached to native canvas.");
-        Check(root.localPosition.x==20 && root.localPosition.y==-308,"HUD does not reserve space above all three resources.");
-        var inside=root.Children.Single(c=>c.gameObject.name=="Background");
-        var fill=(RectTransform)inside.Children.Single();
-        Check(fill.anchorMax.x==0.5f,"Native HUD fill does not match remaining/full protection.");
+        Check(root.localPosition.x==20 && root.localPosition.y==-345,"HUD artwork does not reserve space above all three resources.");
+        Check(root.rect.height==32 && root.rect.width==180,"HUD changed native panel dimensions.");
+        var fastField=typeof(ShieldHud).GetField("fast",BindingFlags.Instance|BindingFlags.NonPublic);
+        var slowField=typeof(ShieldHud).GetField("slow",BindingFlags.Instance|BindingFlags.NonPublic);
+        var fast=(GuiBar)fastField.GetValue(bar); var slow=(GuiBar)slowField.GetValue(bar);
+        Check(fast.Value==0.5f && slow.Value==0.5f && fast.Width==164 && slow.Width==164,"Native GuiBar values/width do not match the shield.");
+        Check(fast!=hud.m_eitrBarFast && fast.m_bar!=hud.m_eitrBarFast.m_bar && hud.m_eitrBarFast.Value==1,"Cloned bar altered native Eitr references or values.");
+        var fillImage=fast.m_bar.GetComponent<UnityEngine.UI.Image>();
+        Check(fillImage.sprite==hud.m_eitrBarFast.m_bar.GetComponent<UnityEngine.UI.Image>().sprite && fillImage.type==UnityEngine.UI.Image.Type.Tiled,"Native fill sprite or tiling was replaced.");
+        Check(root.GetComponentsInChildren<Animator>(true).Length==0,"Native panel Animator was copied.");
+        Check(root.GetComponentsInChildren<NativeResourceUpdater>(true).All(c=>!c.enabled)
+            && hud.m_eitrBarRoot.GetComponentsInChildren<NativeResourceUpdater>(true).All(c=>c.enabled),"Resource updater was not isolated to the clone.");
+        Check(root.GetComponentsInChildren<UnityEngine.UI.Graphic>(true).All(g=>!g.raycastTarget),"Shield visuals intercept native HUD input.");
         var text=typeof(ShieldHud).GetField("text",BindingFlags.Instance|BindingFlags.NonPublic);
         Check(((TMPro.TMP_Text)text.GetValue(bar)).text=="Shield 250 / 500","Native HUD current/max text differs.");
+        var clonedText=(TMPro.TMP_Text)text.GetValue(bar);
+        Check(clonedText.font==hud.m_eitrText.font && clonedText.fontSharedMaterial==hud.m_eitrText.fontSharedMaterial
+            && clonedText.fontSize==hud.m_eitrText.fontSize,"Native typography was replaced.");
         bar.Tick(false); Check(!root.gameObject.activeSelf && player.Manager.Effect==shield,"HUD toggle changed shield state.");
         bar.Tick(true); Check(root.gameObject.activeSelf,"HUD did not reappear after enabling.");
         shield.Hit(240); ShieldRefresh.TryRefresh(shield,2,0); bar.Tick(true);
-        Check(((TMPro.TMP_Text)text.GetValue(bar)).text=="Shield 100 / 100" && fill.anchorMax.x==1,"Native HUD retained old maximum after refresh.");
+        Check(((TMPro.TMP_Text)text.GetValue(bar)).text=="Shield 100 / 100" && fast.Value==1 && slow.Value==1,"Native HUD retained old maximum after refresh.");
         player.Dead=true; bar.Tick(true); Check(!root.gameObject.activeSelf,"HUD remains visible after death.");
         player.Dead=false; player.Teleporting=true; bar.Tick(true); Check(!root.gameObject.activeSelf,"HUD remains visible during teleport.");
         player.Teleporting=false; hud.Visible=false; bar.Tick(true); Check(!root.gameObject.activeSelf,"HUD ignores vanilla visibility.");
@@ -295,7 +379,7 @@ internal static class Program
         player.Manager.Effect=shield; bar.Tick(true); Check(root.gameObject.activeSelf,"HUD failed to recover after a new shield.");
         Hud.instance=new Hud(); bar.Tick(true); Check(root.gameObject.Destroyed,"HUD recreation retained old elements.");
         Player.m_localPlayer=null; bar.Tick(true);
-        var secondRoot=Hud.instance.m_rootObject.transform.Children.Single();
+        var secondRoot=Hud.instance.m_rootObject.transform.Children.Single(c=>c.gameObject.name=="ImprovedMagicShield.ResourceBar");
         Check(!secondRoot.gameObject.activeSelf,"Menu/no-player state retains shield HUD.");
         bar.Destroy(); Check(secondRoot.gameObject.Destroyed,"Plugin destruction retains shield HUD.");
         Hud.instance=null;

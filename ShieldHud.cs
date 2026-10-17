@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,67 +10,103 @@ namespace ImprovedMagicShield
     internal sealed class ShieldHud
     {
         private Hud owner;
+        private Hud failedHud;
         private RectTransform root;
-        private RectTransform fill;
+        private RectTransform visual;
+        private GuiBar fast;
+        private GuiBar slow;
         private TMP_Text text;
-        private const float Width = 240f;
-        private const float Height = 28f;
+        private const float BorderWidth = 16f;
+        private const float Gap = 6f;
 
         internal void Tick(bool enabled)
         {
             Hud hud = Hud.instance;
             Player player = Player.m_localPlayer;
             if (!enabled || hud == null || player == null || player.IsDead() || player.IsTeleporting()
-                || !hud.IsVisible() || player.InCutscene())
-            {
-                Hide();
-                return;
-            }
+                || !hud.IsVisible() || player.InCutscene()) { Hide(); return; }
             SE_Shield shield = ShieldRefresh.FindShield(player);
             if (!HudPolicy.TryRead(shield, out float remaining, out float capacity)) { Hide(); return; }
             if (owner != hud || root == null)
             {
                 Destroy();
-                if (hud.m_rootObject == null || hud.m_staminaBar2Root == null || hud.m_staminaText == null) return;
-                Create(hud);
+                if (failedHud == hud || hud.m_rootObject == null || hud.m_staminaBar2Root == null
+                    || hud.m_eitrBarRoot == null || hud.m_eitrBarFast == null || hud.m_eitrBarSlow == null || hud.m_eitrText == null) return;
+                try { Create(hud); }
+                catch (Exception error)
+                {
+                    Destroy();
+                    failedHud = hud;
+                    Debug.LogWarning("Improved Magic Shield: native resource HUD could not be cloned. Shield mechanics remain active. " + error);
+                    return;
+                }
             }
             root.gameObject.SetActive(true);
+            string display = HudPolicy.Text(remaining, capacity);
+            float panelWidth = Mathf.Max(hud.m_staminaBar2Root.rect.width, hud.m_eitrBarRoot.rect.width);
+            if (hud.m_adrenalineBarRoot != null) panelWidth = Mathf.Max(panelWidth, hud.m_adrenalineBarRoot.rect.width);
+            float width = Mathf.Max(panelWidth - BorderWidth, text.GetPreferredValues(display).x + 8f);
+            root.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width + BorderWidth);
+            text.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+            text.text = display;
+            float fraction = HudPolicy.Fraction(remaining, capacity);
+            fast.SetMaxValue(1f);
+            slow.SetMaxValue(1f);
+            // First SetValue initializes GuiBar's cached width; SetWidth must follow it.
+            fast.SetValue(fraction);
+            slow.SetValue(fraction);
+            fast.SetWidth(width);
+            slow.SetWidth(width);
+            fast.SetColor(new Color(0.68f, 0.35f, 0.90f, 1f));
             Position(hud);
-            fill.anchorMax = new Vector2(HudPolicy.Fraction(remaining, capacity), 1f);
-            text.text = HudPolicy.Text(remaining, capacity);
         }
 
         private void Create(Hud hud)
         {
-            owner = hud;
-            root = Rect("ImprovedMagicShield.ResourceBar", hud.m_rootObject.transform);
-            root.anchorMin = root.anchorMax = new Vector2(0.5f, 0.5f);
+            // In the installed HUD this resolves to eitrpanel/Stamina: only the
+            // resource artwork, two GuiBars and TMP label, below the panel Animator.
+            Transform source = hud.m_eitrBarFast.transform;
+            while (source != null && (!hud.m_eitrBarSlow.transform.IsChildOf(source) || !hud.m_eitrText.transform.IsChildOf(source))) source = source.parent;
+            if (source == null || !source.IsChildOf(hud.m_eitrBarRoot)) throw new InvalidOperationException("Eitr resource visuals no longer share an expected subtree.");
+            var container = new GameObject("ImprovedMagicShield.ResourceBar", typeof(RectTransform));
+            container.SetActive(false);
+            root = (RectTransform)container.transform;
+            root.SetParent(hud.m_rootObject.transform, false);
+            root.anchorMin = root.anchorMax = new Vector2(0.5f, 0f);
             root.pivot = new Vector2(0.5f, 0f);
-            root.sizeDelta = new Vector2(Width, Height);
-            Image border = root.gameObject.AddComponent<Image>();
-            border.color = new Color(0.08f, 0.04f, 0.11f, 0.95f);
-            border.raycastTarget = false;
-            RectTransform inside = Rect("Background", root);
-            Stretch(inside, 3f);
-            Image background = inside.gameObject.AddComponent<Image>();
-            background.color = new Color(0.2f, 0.13f, 0.26f, 0.95f);
-            background.raycastTarget = false;
-            fill = Rect("Protection", inside);
-            Stretch(fill, 0f);
-            Image protection = fill.gameObject.AddComponent<Image>();
-            protection.color = new Color(0.58f, 0.30f, 0.82f, 1f);
-            protection.raycastTarget = false;
-            // Reuse the game's actual font/material and inherit its HUD canvas scaling.
-            text = Object.Instantiate(hud.m_staminaText, root);
-            text.name = "ProtectionText";
+            root.sizeDelta = new Vector2(hud.m_eitrBarRoot.rect.width, hud.m_eitrBarRoot.rect.height);
+            visual = (RectTransform)Object.Instantiate(source.gameObject, root, false).transform;
+            fast = MapClone(hud.m_eitrBarFast, source, visual);
+            slow = MapClone(hud.m_eitrBarSlow, source, visual);
+            text = MapClone(hud.m_eitrText, source, visual);
+            // Native GuiBar updates only its supplied value; it never reads Eitr.
+            // Suppress any foreign controller added to this visual subtree by a HUD mod.
+            foreach (Behaviour behaviour in visual.GetComponentsInChildren<Behaviour>(true))
+                if (!(behaviour is Graphic) && !(behaviour is GuiBar)) behaviour.enabled = false;
+            foreach (Graphic graphic in visual.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
+            visual.gameObject.SetActive(true); // The native panel's Animator may have hidden its visual child.
+            fast.gameObject.SetActive(true);
+            slow.gameObject.SetActive(true);
             text.gameObject.SetActive(true);
-            Stretch(text.rectTransform, 0f);
-            text.rectTransform.localScale = Vector3.one;
-            text.alignment = TextAlignmentOptions.Center;
-            text.enableAutoSizing = false;
-            text.fontSize = 18f;
-            text.color = Color.white;
-            text.raycastTarget = false;
+            fast.m_smoothDrain = false;
+            fast.m_smoothFill = false;
+            owner = hud;
+        }
+
+        private static T MapClone<T>(T original, Transform source, Transform clone) where T : Component
+        {
+            var path = new Stack<int>();
+            Transform node = original.transform;
+            while (node != source)
+            {
+                if (node == null) throw new InvalidOperationException("Native HUD reference escaped its visual subtree.");
+                path.Push(node.GetSiblingIndex());
+                node = node.parent;
+            }
+            while (path.Count > 0) clone = clone.GetChild(path.Pop());
+            T component = clone.GetComponent<T>();
+            if (component == null) throw new InvalidOperationException("A cloned native resource component is missing.");
+            return component;
         }
 
         private void Position(Hud hud)
@@ -76,36 +114,17 @@ namespace ImprovedMagicShield
             Transform parent = root.parent;
             Bounds stamina = RectTransformUtility.CalculateRelativeRectTransformBounds(parent, hud.m_staminaBar2Root);
             float top = stamina.max.y;
-            // Reserve space for all three native resources, even while a bar is hidden
-            // or animating. This avoids jumping into Eitr/adrenaline when they appear.
-            if (hud.m_eitrBarRoot != null)
-                top = Mathf.Max(top, RectTransformUtility.CalculateRelativeRectTransformBounds(parent, hud.m_eitrBarRoot).max.y);
-            if (hud.m_adrenalineBarRoot != null)
-                top = Mathf.Max(top, RectTransformUtility.CalculateRelativeRectTransformBounds(parent, hud.m_adrenalineBarRoot).max.y);
-            root.localPosition = new Vector3(stamina.center.x, top + 12f, 0f);
-        }
-
-        private static RectTransform Rect(string name, Transform parent)
-        {
-            var obj = new GameObject(name, typeof(RectTransform));
-            var rect = (RectTransform)obj.transform;
-            rect.SetParent(parent, false);
-            return rect;
-        }
-
-        private static void Stretch(RectTransform rect, float inset)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(inset, inset);
-            rect.offsetMax = new Vector2(-inset, -inset);
+            if (hud.m_eitrBarRoot != null) top = Mathf.Max(top, RectTransformUtility.CalculateRelativeRectTransformBounds(parent, hud.m_eitrBarRoot).max.y);
+            if (hud.m_adrenalineBarRoot != null) top = Mathf.Max(top, RectTransformUtility.CalculateRelativeRectTransformBounds(parent, hud.m_adrenalineBarRoot).max.y);
+            Bounds artwork = RectTransformUtility.CalculateRelativeRectTransformBounds(root, visual);
+            root.localPosition = new Vector3(stamina.center.x - artwork.center.x, top + Gap - artwork.min.y, 0f);
         }
 
         private void Hide() { if (root != null) root.gameObject.SetActive(false); }
         internal void Destroy()
         {
             if (root != null) { root.gameObject.SetActive(false); Object.Destroy(root.gameObject); }
-            root = null; fill = null; text = null; owner = null;
+            root = null; visual = null; fast = null; slow = null; text = null; owner = null;
         }
     }
 }

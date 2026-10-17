@@ -10,13 +10,19 @@ namespace ImprovedMagicShield
         private static readonly int publisherKey = "Slikfoul.ImprovedMagicShield.Publisher".GetStableHashCode();
         private readonly HashSet<ZNetView> published = new HashSet<ZNetView>();
         private readonly List<Label> labels = new List<Label>();
+        private readonly List<ScreenLabel> frameLabels = new List<ScreenLabel>();
+        private int preparedFrame = -1;
+        private Camera preparedCamera;
         private float nextTick;
         private GUIStyle style;
         private sealed class Label
         {
             internal Character Character;
-            internal float Protection;
-            internal SE_Shield LocalShield;
+        }
+        private struct ScreenLabel
+        {
+            internal Label Label;
+            internal Vector3 Position;
         }
 
         internal void Tick(bool enabled, bool show)
@@ -26,7 +32,7 @@ namespace ImprovedMagicShield
                 Clear();
                 return;
             }
-            if (!show) labels.Clear();
+            if (!show) { labels.Clear(); ClearFrame(); }
             if (Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + 0.1f;
             labels.Clear();
@@ -63,7 +69,9 @@ namespace ImprovedMagicShield
                     if (!DisplayPolicy.IsFresh(remaining, zdo.GetLong(sampleKey, 0L) / 1000.0, now,
                         zdo.GetLong(publisherKey, 0L), zdo.GetOwner())) continue;
                 }
-                if (show && remaining > 0f) labels.Add(new Label { Character = character, Protection = remaining, LocalShield = localShield });
+                // Publishing above also includes our own character. Only its local label is excluded.
+                if (show && remaining > 0f && character != Player.m_localPlayer)
+                    labels.Add(new Label { Character = character });
             }
             published.RemoveWhere(v => v == null || !v.IsValid() || !v.IsOwner());
         }
@@ -71,30 +79,83 @@ namespace ImprovedMagicShield
         internal void Clear()
         {
             labels.Clear();
+            ClearFrame();
             foreach (ZNetView view in published)
                 if (view != null && view.IsValid() && view.IsOwner()) view.GetZDO().Set(protectionKey, 0f);
             published.Clear();
             nextTick = 0f;
         }
 
+        private void ClearFrame()
+        {
+            frameLabels.Clear();
+            preparedFrame = -1;
+            preparedCamera = null;
+        }
+
+        private static bool CanShow()
+        {
+            Player player = Player.m_localPlayer;
+            return ZNet.instance != null && player != null && !player.IsDead()
+                && !player.IsTeleporting() && !player.InCutscene()
+                && (Hud.instance == null || Hud.instance.IsVisible());
+        }
+
+        private static bool TryProtection(Character character, out float remaining)
+        {
+            remaining = 0f;
+            if (character == null || character == Player.m_localPlayer || character.IsDead()) return false;
+            Player player = character as Player;
+            if (player != null && player.IsTeleporting()) return false;
+            ZNetView view = character.GetComponent<ZNetView>();
+            if (view == null || !view.IsValid()) return false;
+            if (view.IsOwner())
+            {
+                SE_Shield shield = ShieldRefresh.FindShield(character);
+                remaining = shield == null ? 0f : ShieldRefresh.Remaining(shield);
+                return remaining > 0f && !float.IsInfinity(remaining);
+            }
+            ZDO zdo = view.GetZDO();
+            remaining = zdo.GetFloat(protectionKey, 0f);
+            return DisplayPolicy.IsFresh(remaining, zdo.GetLong(sampleKey, 0L) / 1000.0,
+                ZNet.instance.GetTimeSeconds(), zdo.GetLong(publisherKey, 0L), zdo.GetOwner());
+        }
+
+        // Called by the main camera immediately before culling, after camera/character LateUpdate.
+        // The 10 Hz discovery/publication tick never samples world or screen coordinates.
+        internal void PrepareFrame(Camera camera, bool show)
+        {
+            if (camera == null || camera != Utils.GetMainCamera()) return;
+            ClearFrame();
+            if (!show || !CanShow()) return;
+            preparedFrame = Time.frameCount;
+            preparedCamera = camera;
+            foreach (Label label in labels)
+            {
+                if (!TryProtection(label.Character, out _)) continue;
+                // GetTopPoint uses TransformPoint(capsule.center), not physics collider.bounds.
+                // Follow the rendered root, without animated head motion or added interpolation.
+                Vector3 position = label.Character.GetTopPoint() + Vector3.up * 0.3f;
+                if ((position - camera.transform.position).sqrMagnitude > 60f * 60f) continue;
+                Vector3 screen = camera.WorldToScreenPointScaled(position);
+                if (screen.z <= 0f || screen.x < 0f || screen.x > Screen.width || screen.y < 0f || screen.y > Screen.height) continue;
+                frameLabels.Add(new ScreenLabel { Label = label, Position = screen });
+            }
+        }
+
         internal void Draw(int scale)
         {
-            Camera camera = Camera.main;
-            if (camera == null) return;
+            if (Event.current == null || Event.current.type != EventType.Repaint || !CanShow()
+                || preparedFrame != Time.frameCount || preparedCamera == null || preparedCamera != Utils.GetMainCamera()) return;
             if (style == null) style = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             style.fontSize = Mathf.RoundToInt(20f * Mathf.Clamp(scale, 50, 300) / 100f);
             Color previous = GUI.color;
             try
             {
-                foreach (Label label in labels)
+                foreach (ScreenLabel item in frameLabels)
                 {
-                    if (label.Character == null || label.Character.IsDead()) continue;
-                    Vector3 position = label.Character.GetCenterPoint() + Vector3.up * (label.Character.GetRadius() + 0.5f);
-                    if ((position - camera.transform.position).sqrMagnitude > 60f * 60f) continue;
-                    Vector3 screen = camera.WorldToScreenPoint(position);
-                    if (screen.z <= 0f || screen.x < 0f || screen.x > Screen.width || screen.y < 0f || screen.y > Screen.height) continue;
-                    float remaining = label.LocalShield == null ? label.Protection : ShieldRefresh.Remaining(label.LocalShield);
-                    if (!(remaining > 0f)) continue;
+                    if (!TryProtection(item.Label.Character, out float remaining)) continue;
+                    Vector3 screen = item.Position;
                     string text = "Shield: " + DisplayPolicy.WholeProtection(remaining);
                     float width = style.CalcSize(new GUIContent(text)).x + 12f;
                     float height = style.fontSize * 2f;
