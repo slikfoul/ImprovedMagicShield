@@ -39,10 +39,6 @@ The three switches are independent:
 
 **Protection per segment** controls the lower bar's length: default **50**, integer range **10–500**. Each native 32-unit HUD segment represents this much full shield protection. At the default scale, a 200-protection shield spans four segments and a 700-protection shield spans fourteen. The bar uses the actual applied shield's maximum, including shields cast by someone else. Damage changes the fill, while an accepted replacement changes the overall length to match the new shield. The frame has no minimum width imposed by the text. On short bars, the caption remains centered at its native font size and may extend beyond the frame; other resource values do not affect the shield bar's length.
 
-The lower bar is local-player-only and reuses the native Eitr resource artwork: frame, background, tiled fill, slow damage indicator and text font/material. It inherits the native resource thickness and HUD scaling, with a purple shield fill. Its position stays fixed when stamina, Eitr or adrenaline appears, disappears, changes width or animates, with the same row spacing as the native resource bars. A new shield or accepted recast shows it for five seconds; shield damage and vanilla notifications that an alerted enemy targets you keep it visible or reveal it again. Attack, block and bow inputs alone do not reveal it; neither does a non-alerted detection report. After five seconds without these events it fades out over half a second, including damaged shields. A rejected weaker cast does not reset the shield timer. After an accepted replacement with a 100-protection shield it shows `100 / 100`, even if the previous shield's capacity was 500. It hides when no protection remains, the effect expires, the player dies or teleports, the vanilla HUD is hidden, or the mod is disabled. The native-style layout still needs live validation at different resolutions, UI scales and with other HUD mods.
-
-Overhead labels show remaining protection rounded down to a whole number. They use the same five-second display period and half-second fade as the lower bar, including damaged shields. Each label follows the shielded character's own activity: casts, absorbed damage and alerted-enemy target reports for players; shield casts, damage and active alerted AI targets for creatures such as summoned skeletons. The observing player's combat state does not reveal other characters' numbers. Player and summoned skeleton labels sit above the top of their native name; other creature labels sit below the visible native name and health block. The gap follows the HUD canvas scale. Increasing label size extends away from the native text rather than over it. Labels reuse the native name font and share its canvas and transform hierarchy, so camera movement, HUD scaling and pixel alignment are applied together. A native label hides with its header instead of jumping to a different anchor. If no native header has been available, a rendered-character fallback is used. Positions are prepared for the current main-camera frame. Your own overhead label is always hidden, independently of the local bar setting. Remote numbers and the last shield/combat activity time are display-only values supplied through the character owner's ZDO with a snapshot timestamp and owner identity. They follow normal replication delay, expire after two seconds without fresh data, and reject data from a previous owner. The owning peer must have this mod enabled to supply current numbers and activity. Update participating clients to the same build: older builds cannot supply the activity snapshots needed by these labels. Hiding your overhead labels does not stop supplying values to other modded clients.
-
 ### Magic Shield appearance
 
 **Magic Shield Effect** is a separate switch, **off by default**. It enables all five appearance controls below on this client, including color. There is no separate Change color switch.
@@ -75,28 +71,3 @@ For player-owned characters, the **recipient's client** decides which refresh ru
 A modded recipient therefore benefits even when the caster has no mod. An unmodified recipient remains vanilla even when the caster has the mod.
 
 The mod adds no custom RPCs or server-enforced version requirement. Unmodified owners retain vanilla refresh behavior. It does not synchronize or transfer the status effect itself.
-
-## Building and testing
-
-Use the .NET SDK, an installed Valheim client and BepInEx core assemblies from an existing r2modman profile. The plugin targets .NET Framework 4.6.2; the managed check runner targets .NET 9.
-
-```powershell
-dotnet build ImprovedMagicShield.csproj -c Release
-./Test.ps1
-./BuildPackage.ps1 -SkipBuild
-```
-
-Override the game and BepInEx profile paths when needed:
-
-```powershell
-dotnet build ImprovedMagicShield.csproj -c Release "-p:ValheimDir=D:\Games\Valheim" "-p:ModProfile=D:\ModProfiles\Default"
-./Test.ps1 -ValheimDir 'D:\Games\Valheim'
-```
-
-The check runner references Harmony/Cecil from the default r2modman profile; its `BepInExCore` MSBuild property can be overridden for a different reference location. No game assemblies or BepInEx binaries are included in this repository.
-
-`BuildAndInstall.ps1` builds, checks, packages and registers the local build in r2modman Default. It accepts explicit `DataRoot`, `Profile` and `ValheimDir` overrides. Close Valheim and r2modman before installing; the script stops if either is running. It preserves configuration, enabled state, existing trust and other package entries, backs up replaced files, and refuses downgrades. Package creation or local installation does not publish anything.
-
-## License
-
-[MIT](LICENSE).

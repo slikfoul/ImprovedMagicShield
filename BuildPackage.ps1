@@ -51,7 +51,6 @@ $sources = [ordered]@{
     'README.md' = Join-Path $packaging 'README.md'
     'CHANGELOG.md' = Join-Path $packaging 'CHANGELOG.md'
     'icon.png' = $icon
-    'LICENSE' = Join-Path $PSScriptRoot 'LICENSE'
     'BepInEx/plugins/ImprovedMagicShield/ImprovedMagicShield.dll' = $dll
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -76,6 +75,6 @@ try {
     Copy-Item -LiteralPath $dll -Destination (Join-Path $artifacts "ImprovedMagicShield-$version.dll") -Force
     $report = [ordered]@{ version=$version; archive=$archive; archiveSha256=(Get-FileHash -LiteralPath $archive).Hash; dllSha256=(Get-FileHash -LiteralPath $dll).Hash; entries=@($sources.Keys) }
     $report | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $artifacts "package-validation-$version.json") -Encoding utf8
-    Write-Output "Verified ImprovedMagicShield ${version}: DLL/plugin/project/manifest/changelog/archive versions, icon, dependencies, license, exact entries and SHA256."
+    Write-Output "Verified ImprovedMagicShield ${version}: DLL/plugin/project/manifest/changelog/archive versions, icon, dependencies, exact entries and SHA256."
     Get-Item -LiteralPath $archive | Select-Object FullName,Length
 } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
