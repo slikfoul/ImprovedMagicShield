@@ -15,6 +15,12 @@ Improved Magic Shield refreshes a magic shield when the new cast's full protecti
 
 Incoming skill and item levels come from the new vanilla cast. The world-level bonus follows Valheim's normal shield calculation. Equal protection is accepted.
 
+## Screenshot
+
+The lower bar shows your remaining and full shield protection. The optional number above another character shows their remaining protection.
+
+![Local shield protection bar and another player's remaining protection](https://raw.githubusercontent.com/slikfoul/ImprovedMagicShield/main/assets/screenshots/shield-displays.png)
+
 ## Configuration
 
 Open the in-game BepInEx ConfigurationManager (normally F1) and find **Improved Magic Shield**. Settings are saved in `BepInEx/config/Slikfoul.ImprovedMagicShield.cfg`; saved values take precedence over defaults.
