@@ -1,7 +1,5 @@
 # Improved Magic Shield
 
-**Version 0.1.0**
-
 Improved Magic Shield refreshes a magic shield when the new cast's full protection is **at least** the protection remaining on the active shield.
 
 - **Accepted cast:** discard previously absorbed damage, apply the new cast's full protection and item-level duration, and restart its timer.
@@ -31,7 +29,7 @@ The three switches are independent:
 
 **Label scale (%)** controls the overhead label size: default **100**, integer range **50–300**. It does not change the lower resource bar's size; that bar inherits the game's HUD canvas scaling.
 
-The lower bar is local-player-only and reuses the native Eitr resource artwork: frame, background, tiled fill, slow damage indicator and text font/material. It inherits the native resource thickness and HUD scaling, with a purple shield fill. After an accepted replacement with a 100-protection shield it shows `100 / 100`, even if the previous shield's capacity was 500. It hides when no protection remains, the effect expires, the player dies or teleports, the vanilla HUD is hidden, or the mod is disabled. The native-style layout in 0.0.2 still needs live validation at different resolutions, UI scales and with other HUD mods.
+The lower bar is local-player-only and reuses the native Eitr resource artwork: frame, background, tiled fill, slow damage indicator and text font/material. It inherits the native resource thickness and HUD scaling, with a purple shield fill. After an accepted replacement with a 100-protection shield it shows `100 / 100`, even if the previous shield's capacity was 500. It hides when no protection remains, the effect expires, the player dies or teleports, the vanilla HUD is hidden, or the mod is disabled. The native-style layout still needs live validation at different resolutions, UI scales and with other HUD mods.
 
 Overhead labels show remaining protection rounded down to a whole number. They follow the rendered top of each other character, with screen positions calculated for the current main-camera frame. Your own overhead label is always hidden, independently of the local bar setting. Remote numbers are display-only values supplied through the character owner's ZDO with a timestamp and owner identity. They follow normal replication delay, expire after two seconds without fresh data, and reject data from a previous owner. The owning peer must have this mod enabled to supply current numbers. Hiding your overhead labels does not stop supplying values to other modded clients.
 
