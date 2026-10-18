@@ -25,8 +25,128 @@ internal static class Program
         HudLifecycleChecks();
         HudVisibilityChecks();
         ActivityDisplayChecks();
+        HealthOutlineChecks();
         InstalledIlChecks(args[0], args[1]);
         Console.WriteLine("Passed " + checks + " automated checks: production refresh helpers, rejection state, disabled mode, labels/ZDO test doubles, installed-game IL and emitted replacement block. This is not live Unity or multiplayer testing.");
+    }
+
+    private static void HealthOutlineChecks()
+    {
+        foreach (float capacity in new[] { 200f, 300f, 365f, 700f })
+        {
+            Check(DisplayPolicy.ProtectionFraction(capacity, capacity) == 1f, "Full shield fraction depends on caster strength.");
+            Check(DisplayPolicy.ProtectionFraction(capacity * 0.5f, capacity) == 0.5f, "Half shield fraction differs by capacity.");
+        }
+        foreach (float invalid in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+        {
+            Check(DisplayPolicy.ProtectionFraction(100f, invalid) == 0f, "Invalid or absent capacity is rendered as a full shield.");
+            Check(DisplayPolicy.ProtectionFraction(invalid, 100f) == 0f, "Invalid remaining protection is rendered.");
+        }
+        var local = new Player(); Player.m_localPlayer = local;
+        var player = new Player(); var skeleton = new Character();
+        skeleton.gameObject.name = "Skeleton_Friendly(Clone)";
+        var unshielded = new Character();
+        local.Manager.Effect = new SE_Shield(700, 0);
+        player.Manager.Effect = new SE_Shield(700, 327);
+        skeleton.Manager.Effect = new SE_Shield(200, 190);
+        Character.All.Clear(); Character.All.AddRange(new Character[] { local, player, skeleton, unshielded });
+        EnemyHud.instance = new EnemyHud(); Hud.instance = new Hud(); Camera.main = new Camera();
+        var headers = new Dictionary<Character, GameObject>();
+        var healths = new Dictionary<Character, RectTransform>();
+        foreach (Character character in Character.All)
+        {
+            var header = new GameObject("Header", typeof(RectTransform));
+            var name = new GameObject("Name", typeof(RectTransform)); name.transform.SetParent(header.transform, false);
+            ((RectTransform)name.transform).TestBounds = new Bounds { min = new Vector3(10, 20, 0), max = new Vector3(110, 44, 0) };
+            name.AddComponent<TMPro.TMP_Text>();
+            var health = (RectTransform)new GameObject("Health", typeof(RectTransform)).transform;
+            health.SetParent(header.transform, false); health.sizeDelta = new Vector2(100, 10);
+            health.TestBounds = new Bounds { min = new Vector3(10, 5, 0), max = new Vector3(110, 15, 0) };
+            health.gameObject.AddComponent<UnityEngine.UI.Image>().color = new Color(0, 1, 0);
+            headers[character] = header; healths[character] = health; EnemyHud.instance.Set(character, header);
+        }
+        var display = new ShieldLabels(); Time.unscaledTime += 1; ZNet.instance = new ZNet();
+        void Render(bool numbers, bool outline)
+        {
+            Time.unscaledTime += 1; Time.frameCount++; GUI.Texts.Clear();
+            display.Tick(true, numbers, outline); display.PrepareFrame(Camera.main, numbers, 80, -20, outline); display.Draw(80, -20);
+        }
+        GameObject Rim(Character character) { return healths[character].Find("ImprovedMagicShield.HealthOutline")?.gameObject; }
+        float Fraction(GameObject outline) { return ((RectTransform)outline.transform.Find("Progress")).anchorMax.x; }
+        Render(false, false);
+        Check(Rim(player) == null && Rim(skeleton) == null, "Disabled outline created UI.");
+        Check(player.View.Data.GetFloat("Slikfoul.ImprovedMagicShield.Capacity".GetStableHashCode(), 0f) == 700f,
+            "Hidden displays stop publishing the applied shield capacity.");
+        Render(false, true);
+        Check(Rim(player)?.activeInHierarchy == true && Rim(skeleton)?.activeInHierarchy == true, "Outline without numbers misses players or summons.");
+        Check(Rim(local) == null && Rim(unshielded) == null && GUI.Texts.Count == 0, "Outline reveals own/absent shield or enables numbers.");
+        var original = Rim(player);
+        Check(Math.Abs(Fraction(original) - 373f / 700f) < 0.0001f, "Player outline does not show the actual applied shield fraction.");
+        Check(Math.Abs(Fraction(Rim(skeleton)) - 0.05f) < 0.0001f, "Skeleton outline assumes a 700-protection maximum.");
+        player.Manager.Effect = new SE_Shield(300, 150); Render(false, true);
+        Check(Fraction(original) == 0.5f, "Half of a 300-protection shield does not cover half the bar.");
+        player.Manager.Effect = new SE_Shield(200, 0); Render(false, true);
+        Check(Fraction(original) == 1f, "A full 200-protection shield does not cover the full bar.");
+        int capacityKey = "Slikfoul.ImprovedMagicShield.Capacity".GetStableHashCode();
+        int protectionKey = "Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode();
+        int publisherKey = "Slikfoul.ImprovedMagicShield.Publisher".GetStableHashCode();
+        player.View.Owner = false;
+        player.Manager.Effect = new SE_Shield(99999, 0);
+        player.View.Data.Set(protectionKey, 100f); Render(false, true);
+        Check(Fraction(original) == 0.5f, "Remote outline reads a local effect instead of owner capacity.");
+        player.View.Data.Set(capacityKey, 0f); Render(false, true);
+        Check(!original.activeSelf, "An older owner without capacity gets a made-up outline percentage.");
+        player.View.Data.Set(capacityKey, 200f); Render(false, true);
+        Check(original.activeSelf, "Fresh remote capacity does not restore its outline.");
+        int capacitySampleKey = "Slikfoul.ImprovedMagicShield.CapacitySampleTime".GetStableHashCode();
+        long capacitySample = player.View.Data.GetLong(capacitySampleKey, -1L);
+        player.View.Data.Set(capacitySampleKey, capacitySample - 1L); Render(false, true);
+        Check(!original.activeSelf, "An older peer refresh reuses a previous owner's capacity.");
+        player.View.Data.Set(capacitySampleKey, capacitySample);
+        player.View.Data.Set(publisherKey, -1L);
+        display.PrepareFrame(Camera.main, false, 80, -20, true);
+        Check(!original.activeSelf, "Outline accepts a previous owner's snapshot.");
+        player.View.Data.Set(publisherKey, player.View.Data.GetOwner());
+        ZNet.instance.Now += 3;
+        display.PrepareFrame(Camera.main, false, 80, -20, true);
+        Check(!original.activeSelf, "Outline displays a stale remote snapshot.");
+        ZNet.instance.Now -= 3; player.View.Owner = true; player.Manager.Effect = new SE_Shield(200, 0);
+        Render(false, true);
+        var edges = original.GetComponentsInChildren<UnityEngine.UI.Image>(true);
+        Check(edges.Length == 2 && edges.All(edge => !edge.raycastTarget), "Outline rim/glow must not intercept input.");
+        foreach (var edge in edges)
+        {
+            Check(edge.color.b > edge.color.g && edge.color.a <= 0.85f, "Outline is not translucent purple.");
+            Check(edge.type == UnityEngine.UI.Image.Type.Sliced && !edge.fillCenter, "Outline paints over the health center.");
+            Check(edge.sprite.texture.GetPixel(0, 0).a == 0f && edge.sprite.texture.GetPixel(32, 32).a == 0f, "Outline corners or center are opaque.");
+        }
+        var sharedRim = edges.Single(edge => edge.gameObject.name == "Rim").sprite;
+        Check(ReferenceEquals(sharedRim, Rim(skeleton).GetComponentsInChildren<UnityEngine.UI.Image>(true).Single(edge => edge.gameObject.name == "Rim").sprite), "Each character creates redundant rounded sprites.");
+        Check(((RectTransform)original.transform).anchorMax.x == 1f
+            && ((RectTransform)edges.Single(edge => edge.gameObject.name == "Rim").transform).sizeDelta.x == 106f,
+            "A partial shield moves a vertical end cap through the native health instead of clipping the full contour.");
+        Check(healths[player].sizeDelta.x == 100 && healths[player].sizeDelta.y == 10
+            && healths[player].gameObject.GetComponent<UnityEngine.UI.Image>().color.g == 1, "Outline changed native health color or size.");
+        player.Manager.Effect.Time += 20; skeleton.Manager.Effect.Time += 20; ZNet.instance.Now += 20;
+        Render(false, true);
+        Check(Rim(player) == original && original.activeInHierarchy, "Quiet shield lost active outline or cloned it again.");
+        healths[player].gameObject.SetActive(false); Render(false, true);
+        Check(!original.activeSelf && Rim(skeleton).activeSelf, "Hidden native health must hide only its outline.");
+        healths[player].gameObject.SetActive(true); Render(false, true);
+        Check(original.activeSelf, "Outline does not recover with the native health.");
+        Render(true, false);
+        Check(!original.activeSelf, "Number setting re-enabled a disabled outline.");
+        Render(false, true); player.Manager.Effect = null; Render(false, true);
+        Check(original.Destroyed, "Expired shield retained an outline.");
+        headers[skeleton].SetActive(false); Render(false, true);
+        Check(!Rim(skeleton).activeSelf, "Hidden header retained visible outline.");
+        headers[skeleton].SetActive(true); Render(false, true); Hud.instance.Visible = false;
+        display.PrepareFrame(Camera.main, false, 80, -20, true);
+        Check(!Rim(skeleton).activeSelf, "Hidden game HUD retained shield outline.");
+        Hud.instance.Visible = true; Render(false, true); var last = Rim(skeleton);
+        display.Clear(); Check(last.Destroyed, "Outline not disposed on global shutdown.");
+        Check(sharedRim.AssetDestroyed && sharedRim.texture.AssetDestroyed, "Shared outline resources remain after the last display is disposed.");
+        EnemyHud.instance = null; Character.All.Clear();
     }
 
     private static void RefreshChecks()
@@ -118,7 +238,7 @@ internal static class Program
         void Tick() { Time.unscaledTime+=1; labels.Tick(true,true); }
         labels.Tick(true,false); Render(false);
         Check(GUI.Texts.Count==0,"Hidden label drawn.");
-        Check(local.View.Data.Writes==4 && character.View.Data.Writes==4,"Hidden labels stopped owner publication.");
+        Check(local.View.Data.Writes==6 && character.View.Data.Writes==6,"Hidden displays stopped owner publication of protection/capacity/activity.");
         Tick(); Render();
         Check(GUI.Texts.Count==2 && GUI.Texts.Last()=="49" && GUI.LastFontSize==20,"Other label/local exclusion differs.");
         Check(local.View.Data.GetFloat("Slikfoul.ImprovedMagicShield.Protection".GetStableHashCode(),-1)==300,"Excluded local player stopped publishing.");
@@ -276,11 +396,13 @@ internal static class Program
             Check(method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="Internal_AddStatusEffect")
                 && method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="IsOwner"),"SEMan ownership/RPC convergence changed.");
         var modPlugin=mod.MainModule.Types.Single(t=>t.Name=="Plugin");
-        Check(mod.Name.Version.ToString(3)=="1.1.1","Built DLL version differs.");
+        Check(mod.Name.Version.ToString(3)=="1.2.2","Built DLL version differs.");
         var awake=modPlugin.Methods.Single(m=>m.Name=="Awake").Body.Instructions;
         int showIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show remaining protection"));
         int enabledIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Enabled"));
         int hudIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show local shield bar"));
+        int outlineIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show shield health outline"));
+        Check(outlineIndex>=0 && awake[outlineIndex+1].OpCode.Code==Code.Ldc_I4_0,"Health outline must have its own off-by-default setting.");
         Check(showIndex>=0 && awake[showIndex+1].OpCode.Code==Code.Ldc_I4_0,"Label default must be off.");
         Check(enabledIndex>=0 && awake[enabledIndex+1].OpCode.Code==Code.Ldc_I4_1,"Mechanics default must be on.");
         Check(hudIndex>=0 && awake[hudIndex+1].OpCode.Code==Code.Ldc_I4_1,"Local HUD default must be on.");

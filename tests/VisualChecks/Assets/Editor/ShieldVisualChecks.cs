@@ -38,14 +38,14 @@ public static class ShieldVisualChecks
         bep.GetType("BepInEx.Paths").GetMethod("SetExecutablePath",All).Invoke(null,new object[]{Path.Combine(testRoot,"valheim.exe"),testRoot,managed,new[]{core,managed}});
         Assembly harmony = Assembly.LoadFrom(Path.Combine(core,"0Harmony.dll"));
         mod = Assembly.LoadFrom(Path.Combine(root,"bin","Release","ImprovedMagicShield.dll"));
-        Check(mod.GetName().Version == new Version(1,1,1,0), "Release assembly version");
+        Check(mod.GetName().Version == new Version(1,2,2,0), "Release assembly version");
         Check(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null, "Run with graphics initialized to exercise the real client controller");
-        Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow();
+        Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow(); RoundedOutlinePreview();
         Type ht=harmony.GetType("HarmonyLib.Harmony"); object patcher=Activator.CreateInstance(ht,new object[]{"ImprovedMagicShield.VisualChecks"});
         try { ht.GetMethod("PatchAll",new[]{typeof(Assembly)}).Invoke(patcher,new object[]{mod}); Check(true,"All gameplay and visual Harmony hooks bind installed game signatures"); }
         finally { ht.GetMethod("UnpatchSelf").Invoke(patcher,null); }
-        string message="ImprovedMagicShield 1.1.1 Unity component checks passed: "+checks;
-        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.1.1.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
+        string message="ImprovedMagicShield 1.2.2 Unity component checks passed: "+checks;
+        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.2.2.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
     }
 
     private static void ConfigurationAndController()
@@ -266,6 +266,47 @@ public static class ShieldVisualChecks
             name.GetWorldCorners(corners); Near(((Vector2)args[1]).y,corners.Min(p=>p.y),"Hidden real health bar leaves the visible name as anchor");
             header.SetActive(false); args=new object[]{character,Vector2.zero,1f}; Check(!(bool)Call(anchor,"TryLowerEdge",args),"Hidden real header requests character fallback");
             header.SetActive(true); health.gameObject.SetActive(true);
+            Type imageType = Assembly.Load("UnityEngine.UI").GetType("UnityEngine.UI.Image", true);
+            Component nativeHealthImage = health.gameObject.AddComponent(imageType);
+            imageType.GetProperty("color").SetValue(nativeHealthImage, Color.green, null);
+            object outline = Activator.CreateInstance(mod.GetType("ImprovedMagicShield.ShieldHealthOutline", true), true);
+            try {
+                Call(outline, "Render", health, 1f); Canvas.ForceUpdateCanvases();
+                var shell = (RectTransform)health.Find("ImprovedMagicShield.HealthOutline");
+                Check(shell != null && shell.parent == health, "Health outline belongs to the native bar");
+                var images = shell.GetComponentsInChildren(imageType, true);
+                Check(images.Length == 2 && images.All(image => !(bool)imageType.GetProperty("raycastTarget").GetValue(image, null)), "Outline has a non-interactive rounded rim and glow");
+                foreach (Component image in images) {
+                    Check(imageType.GetProperty("type").GetValue(image, null).ToString() == "Sliced"
+                        && !(bool)imageType.GetProperty("fillCenter").GetValue(image, null), "Rounded outline preserves its transparent center");
+                    Sprite sprite = (Sprite)imageType.GetProperty("sprite").GetValue(image, null);
+                    Near(sprite.texture.GetPixel(0, 0).a, 0, "Rounded corner texel is transparent");
+                    Near(sprite.texture.GetPixel(32, 32).a, 0, "Outline center texel is transparent");
+                    Check(((Color)imageType.GetProperty("color").GetValue(image, null)).a <= 0.85f, "Outline has reduced opacity");
+                }
+                var shellCorners = new Vector3[4]; shell.GetWorldCorners(shellCorners); health.GetWorldCorners(corners);
+                Near(shellCorners.Min(point => point.x), corners.Min(point => point.x) - 5f * canvas.scaleFactor, "Outline wraps outside native health left edge");
+                Near(shellCorners.Max(point => point.x), corners.Max(point => point.x) + 5f * canvas.scaleFactor, "Outline wraps outside native health right edge");
+                Check((Color)imageType.GetProperty("color").GetValue(nativeHealthImage, null) == Color.green && health.sizeDelta == new Vector2(180, 10), "Outline preserves native health appearance and geometry");
+                Vector3 oldPosition = shell.position; header.transform.position += new Vector3(10, 7, 0);
+                Near(shell.position.x - oldPosition.x, 10, "Outline shares native header horizontal movement");
+                Near(shell.position.y - oldPosition.y, 7, "Outline shares native header vertical movement");
+                for (int frame = 0; frame < 25; frame++) Call(outline, "Render", health, 1f);
+                Check(shell.GetComponentsInChildren(imageType, true).Length == 2, "Outline reuses existing UI on every frame");
+                health.sizeDelta = new Vector2(240, 10); Canvas.ForceUpdateCanvases();
+                Near(shell.rect.width, 250, "Outline follows native health width changes");
+                Call(outline, "Render", health, 0.5f); Canvas.ForceUpdateCanvases();
+                Near(shell.rect.width, 250, "Partial protection retains the full external contour geometry");
+                var progress = (RectTransform)shell.Find("Progress");
+                Near(progress.anchorMax.x, 0.5f, "Outline fraction clips the contour without moving an end cap into health");
+                Near(((RectTransform)progress.Find("Rim")).rect.width, 246, "Partial protection keeps the rounded right edge at the actual health end");
+                health.gameObject.SetActive(false); Call(outline, "Render", health, 1f);
+                Check(!shell.gameObject.activeSelf, "Outline hides with native health");
+                health.gameObject.SetActive(true); Call(outline, "Render", health, 1f);
+                Check(shell.gameObject.activeSelf, "Outline recovers with native health");
+                Call(outline, "Hide"); Check(!shell.gameObject.activeSelf, "Outline has an independent hide switch");
+                Call(outline, "Render", health, 0f); Check(!shell.gameObject.activeSelf, "Exhausted shield has no outline");
+            } finally { Call(outline, "Dispose"); health.sizeDelta = new Vector2(180, 10); }
             Type tmpType=Assembly.Load("Unity.TextMeshPro").GetType("TMPro.TextMeshProUGUI",true);
             Component nativeText=name.gameObject.AddComponent(tmpType);
             Call(anchor,"TryRender",character,true,365f,100,0);
@@ -312,6 +353,91 @@ public static class ShieldVisualChecks
             singleton.SetValue(null,previous);
             UnityEngine.Object.DestroyImmediate(header); UnityEngine.Object.DestroyImmediate(actor); UnityEngine.Object.DestroyImmediate(enemyRoot);
             singleton.SetValue(null,previous);
+        }
+    }
+
+    private static void RoundedOutlinePreview()
+    {
+        Type imageType = Assembly.Load("UnityEngine.UI").GetType("UnityEngine.UI.Image", true);
+        Type textType = Assembly.Load("UnityEngine.UI").GetType("UnityEngine.UI.Text", true);
+        var cameraObject = new GameObject("Outline preview camera");
+        Camera camera = cameraObject.AddComponent<Camera>(); camera.orthographic = true;
+        camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = new Color(0.03f, 0.05f, 0.07f);
+        var target = new RenderTexture(800, 280, 24); camera.targetTexture = target;
+        var canvasObject = new GameObject("Outline preview canvas", typeof(RectTransform), typeof(Canvas));
+        Canvas canvas = canvasObject.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceCamera;
+        canvas.worldCamera = camera; canvas.planeDistance = 1f;
+        var frames = new System.Collections.Generic.List<object>();
+        var bars = new System.Collections.Generic.List<RectTransform>();
+        Texture2D capture = null; RenderTexture previous = RenderTexture.active;
+        try {
+            float[] fractions = { 1f, 0.5f, 0.1f };
+            string[] captions = { "100%  (700 / 700)", "50%  (150 / 300)", "10%  (20 / 200)" };
+            for (int row = 0; row < 3; row++) {
+                float y = 80f - row * 80f;
+                var bar = (RectTransform)new GameObject("Health", typeof(RectTransform)).transform;
+                bar.SetParent(canvasObject.transform, false); bar.sizeDelta = new Vector2(400, 12); bar.anchoredPosition = new Vector2(80, y);
+                Component image = bar.gameObject.AddComponent(imageType); imageType.GetProperty("color").SetValue(image, Color.green, null);
+                object frame = Activator.CreateInstance(mod.GetType("ImprovedMagicShield.ShieldHealthOutline", true), true);
+                frames.Add(frame); bars.Add(bar); Call(frame, "Render", bar, fractions[row]);
+                var caption = (RectTransform)new GameObject("Caption", typeof(RectTransform)).transform;
+                caption.SetParent(canvasObject.transform, false); caption.sizeDelta = new Vector2(240, 40); caption.anchoredPosition = new Vector2(-260, y);
+                Component text = caption.gameObject.AddComponent(textType);
+                textType.GetProperty("text").SetValue(text, captions[row], null);
+                textType.GetProperty("font").SetValue(text, Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"), null);
+                textType.GetProperty("fontSize").SetValue(text, 18, null);
+                textType.GetProperty("color").SetValue(text, Color.white, null);
+                textType.GetProperty("alignment").SetValue(text, TextAnchor.MiddleLeft, null);
+            }
+            Canvas.ForceUpdateCanvases(); camera.Render(); RenderTexture.active = target;
+            capture = new Texture2D(800, 280, TextureFormat.RGBA32, false);
+            capture.ReadPixels(new Rect(0, 0, 800, 280), 0, 0); capture.Apply();
+            var corners = new Vector3[4]; bars[1].GetWorldCorners(corners);
+            Vector3 center = camera.WorldToScreenPoint(bars[1].position);
+            int middleX = Mathf.RoundToInt(center.x), middleY = Mathf.RoundToInt(center.y);
+            Color untouched = capture.GetPixel(middleX - 1, middleY);
+            Check(untouched.g > 0.95f && untouched.r < 0.05f && untouched.b < 0.05f,
+                "Rendered partial outline must not put a vertical stripe through health");
+            Vector3 leftTop = camera.WorldToScreenPoint(corners[1]);
+            int sampleY = Mathf.RoundToInt(leftTop.y + 2f);
+            Color covered = capture.GetPixel(Mathf.RoundToInt(leftTop.x + 100f), sampleY);
+            Color uncovered = capture.GetPixel(Mathf.RoundToInt(leftTop.x + 300f), sampleY);
+            Check(covered.b > covered.g && covered.b > 0.2f, "Rendered remaining-protection contour is visible outside health");
+            Check(uncovered.b < 0.2f, "Rendered contour is clipped after the remaining percentage");
+            foreach (RectTransform bar in bars) {
+                bar.GetWorldCorners(corners);
+                Vector3 bottomLeft = camera.WorldToScreenPoint(corners[0]);
+                Vector3 topRight = camera.WorldToScreenPoint(corners[2]);
+                foreach (int x in new[] { Mathf.RoundToInt(bottomLeft.x) + 1, Mathf.RoundToInt(topRight.x) - 2 })
+                foreach (int y in new[] { Mathf.RoundToInt(bottomLeft.y) + 1, Mathf.RoundToInt(topRight.y) - 2 }) {
+                    Color pixel = capture.GetPixel(x, y);
+                    Check(pixel.g > 0.95f && pixel.r < 0.05f && pixel.b < 0.05f,
+                        "Semicircular outer edge preserves the square green health corners");
+                }
+            }
+            File.WriteAllBytes(Path.Combine(root, "artifacts", "rounded-health-outline-preview.png"), capture.EncodeToPNG());
+            object replacementFrame = Activator.CreateInstance(mod.GetType("ImprovedMagicShield.ShieldHealthOutline", true), true);
+            var oldHealth = (RectTransform)new GameObject("Old health", typeof(RectTransform)).transform;
+            oldHealth.SetParent(canvasObject.transform, false); oldHealth.sizeDelta = new Vector2(100, 10);
+            var newHealth = (RectTransform)new GameObject("New health", typeof(RectTransform)).transform;
+            newHealth.SetParent(canvasObject.transform, false); newHealth.sizeDelta = new Vector2(100, 10);
+            FieldInfo users = mod.GetType("ImprovedMagicShield.ShieldOutlineSprites", true).GetField("users", All);
+            try {
+                Call(replacementFrame, "Render", oldHealth, 1f);
+                UnityEngine.Object.DestroyImmediate(oldHealth.gameObject);
+                Call(replacementFrame, "Render", newHealth, 0.5f);
+                Check((int)users.GetValue(null) == frames.Count + 1, "Destroyed native headers do not leak shared rounded sprites on recreation");
+            } finally {
+                UnityEngine.Object.DestroyImmediate(newHealth.gameObject);
+                Call(replacementFrame, "Dispose");
+                Check((int)users.GetValue(null) == frames.Count, "Outline unload releases sprites even after its native parent was destroyed");
+            }
+        } finally {
+            RenderTexture.active = previous;
+            foreach (object frame in frames) Call(frame, "Dispose");
+            UnityEngine.Object.DestroyImmediate(canvasObject); UnityEngine.Object.DestroyImmediate(cameraObject);
+            if (capture != null) UnityEngine.Object.DestroyImmediate(capture);
+            target.Release(); UnityEngine.Object.DestroyImmediate(target);
         }
     }
 

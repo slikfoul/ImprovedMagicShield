@@ -13,11 +13,12 @@ namespace ImprovedMagicShield
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "Slikfoul.ImprovedMagicShield";
-        public const string PluginVersion = "1.1.1";
+        public const string PluginVersion = "1.2.2";
         private Harmony harmony;
         private static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> showProtection;
         private static ConfigEntry<bool> showHud;
+        private static ConfigEntry<bool> showHealthOutline;
         private static ConfigEntry<int> labelScale;
         private static ConfigEntry<int> protectionPerSegment;
         private static ConfigEntry<int> labelOffset;
@@ -31,6 +32,7 @@ namespace ImprovedMagicShield
         {
             modEnabled = Config.Bind("1 - General", "Enabled", true, "Enable improved shield refreshes, displays and optional appearance controls. Disabling restores vanilla behavior for subsequent casts without removing active shields.");
             showProtection = Config.Bind("2 - Display", "Show remaining protection", false, "Show remaining shield protection above other eligible characters, never your own character. Use the shielded character's cast, damage and combat activity to fade after five quiet seconds, independently of your combat. The owning peer needs this version to supply current protection and activity.");
+            showHealthOutline = Config.Bind("2 - Display", "Show shield health outline", false, "Draw a rounded, translucent purple contour outside other shielded characters' visible health bars. Its visible length follows remaining / full shield protection without a vertical end cap through health. Independent of protection numbers and the local shield bar; native health stays unchanged. The owning peer needs version 1.2.0 or newer to supply the actual shield capacity.");
             showHud = Config.Bind("2 - Display", "Show local shield bar", true, "Show your own remaining / full shield protection in a fixed lower HUD row. Show for five seconds after a cast, shield damage or a vanilla notification that an alerted enemy targets you. Attack, block and bow inputs alone do not reveal the bar. Fade out after five quiet seconds, including damaged shields. Independent of the overhead labels.");
             labelScale = Config.Bind("2 - Display", "Label scale (%)", 80, new ConfigDescription("Size of the remaining-protection label, in percent.", new AcceptableValueRange<int>(50, 300)));
             protectionPerSegment = Config.Bind("2 - Display", "Protection per segment", 50, new ConfigDescription("Full shield protection represented by one native 32-unit HUD segment. Lower values make the local bar longer. Width follows the currently applied shield, including another caster's shield. The frame keeps shrinking at higher values; its readable caption may extend beyond a short frame. Damage changes only the fill. Whole numbers only.", new AcceptableValueRange<int>(10, 500)));
@@ -60,7 +62,7 @@ namespace ImprovedMagicShield
         private void Update()
         {
             if (shieldVisuals != null) shieldVisuals.ReleaseLightWrites();
-            if (labels != null) labels.Tick(IsEnabled, showProtection.Value);
+            if (labels != null) labels.Tick(IsEnabled, showProtection.Value, showHealthOutline.Value);
         }
 
         private void OnGUI()
@@ -70,7 +72,7 @@ namespace ImprovedMagicShield
 
         private void PrepareLabels(Camera camera)
         {
-            if (labels != null) labels.PrepareFrame(camera, IsEnabled && showProtection.Value, labelScale.Value, labelOffset.Value);
+            if (labels != null) labels.PrepareFrame(camera, IsEnabled && showProtection.Value, labelScale.Value, labelOffset.Value, IsEnabled && showHealthOutline.Value);
         }
 
         private void LateUpdate()

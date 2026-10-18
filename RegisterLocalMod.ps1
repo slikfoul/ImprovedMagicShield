@@ -56,7 +56,7 @@ $backup = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ('backups\before-impor
 AssertChild $backup ([IO.Path]::GetFullPath($PSScriptRoot))
 $staging = Join-Path $backup 'new-cache'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$required = @('manifest.json','README.md','CHANGELOG.md','icon.png','LICENSE','BepInEx/plugins/ImprovedMagicShield/ImprovedMagicShield.dll')
+$required = @('manifest.json','README.md','CHANGELOG.md','icon.png','BepInEx/plugins/ImprovedMagicShield/ImprovedMagicShield.dll')
 $zip = [IO.Compression.ZipFile]::OpenRead($archive)
 try {
     if ($zip.Entries.Count -ne $required.Count) { throw 'Unexpected package contents.' }
@@ -127,7 +127,7 @@ try {
     $newCache = $true
     New-Item -ItemType Directory -Path $managerDirectory | Out-Null
     $newManager = $true
-    foreach ($document in @('manifest.json','README.md','CHANGELOG.md','icon.png','LICENSE')) { Copy-Item -LiteralPath (Join-Path $cacheDirectory $document) -Destination $managerDirectory }
+    foreach ($document in @('manifest.json','README.md','CHANGELOG.md','icon.png')) { Copy-Item -LiteralPath (Join-Path $cacheDirectory $document) -Destination $managerDirectory }
     Copy-Item -LiteralPath (Join-Path $cacheDirectory 'BepInEx\plugins\ImprovedMagicShield') -Destination (Join-Path $managerDirectory 'ImprovedMagicShield') -Recurse
     if (-not $enabled) { foreach ($file in Get-ChildItem -LiteralPath $managerDirectory -Recurse -File) { Rename-Item -LiteralPath $file.FullName -NewName ($file.Name + '.old') } }
     [IO.File]::WriteAllText($tempRegistry,$newRegistry,(New-Object Text.UTF8Encoding $false))

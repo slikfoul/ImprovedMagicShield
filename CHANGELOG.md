@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.2
+- Give the shield health shell a semicircular outer silhouette and square inner opening, with a thicker, brighter purple band while retaining the external percentage clipping.
+
+## 1.2.1
+- Give the health outline rounded antialiased corners and translucent glow. Reveal the remaining fraction of a fixed external contour without a vertical line through the health fill.
+
+## 1.2.0
+- Add an independent, optional purple health-bar outline for other shielded players and creatures; its width shows the remaining fraction of the actual applied shield.
+
 ## 1.1.1
 - Initialize overhead labels at 80 percent size and a vertical offset of -20 HUD units.
 

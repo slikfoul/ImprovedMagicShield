@@ -25,13 +25,16 @@ The lower bar shows your remaining and full shield protection. The optional numb
 
 Open the in-game BepInEx ConfigurationManager (normally F1) and find **Improved Magic Shield**. Settings are saved in `BepInEx/config/Slikfoul.ImprovedMagicShield.cfg`; saved values take precedence over defaults.
 
-The three switches are independent:
+Display switches are independent:
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | **Enabled** | On | Master switch for improved refreshes and displays; each display also has its own switch. Turning this off returns subsequent casts to vanilla behavior and hides the mod's displays without removing active shields. |
 | **Show local shield bar** | On | Show your own `250 / 500` bar in a fixed row above the normal lower resource bars. The fill uses the actual remaining/full capacity of your current shield. It fades out after five quiet seconds, even when damaged, and returns on a cast, shield damage or combat activity. |
 | **Show remaining protection** | Off | Show `123` above player and summoned skeleton names and below the visible name/health block of other shielded creatures within 60 metres of the camera. Never shown on your own character, even when the local HUD bar is off. Appears on that character's shield cast, shield damage or combat, then fades after five quiet seconds. Your own combat does not reveal other characters' labels. This does not enable or disable the local HUD bar. |
+| **Show shield health outline** | Off | Draw a purple shell with a semicircular outer edge and a rectangular inner opening around other shielded players' and creatures' visible health bars. The visible contour spans the full bar at full shield protection and its left half at 50%, without drawing a vertical line through health. It does not change native health or enable overhead numbers. |
+
+The health outline uses the current shield's actual remaining/full protection, including another caster's shield: `200 / 200` and `700 / 700` both cover the whole bar, while `150 / 300` covers half. It follows the native health bar's position, scale and visibility, remains visible while that bar and the shield are active, and disappears when the shield runs out. It is independent of the number display's combat fade. The owning peer needs this mod's capacity snapshots (version 1.2.0 or newer); missing or stale data hides the outline rather than inventing a percentage. Its switch is independent of **Magic Shield Effect**.
 
 **Label scale (%)** controls the overhead label size: default **80**, integer range **50–300**. It does not change the lower resource bar's size; that bar inherits the game's HUD canvas scaling.
 

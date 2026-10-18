@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.2
+- Add an independent, optional purple health-bar shell for other shielded players and creatures, with a semicircular outer edge and rectangular opening; its external contour shows the remaining fraction of the actual applied shield.
+
 ## 1.1.1
 - Show player protection above native player names, matching the summoned skeleton layout and vertical-offset controls.
 - Fade overhead protection with the shielded character's own casts, damage and combat activity, using the same five-second display and half-second fade as the local bar.

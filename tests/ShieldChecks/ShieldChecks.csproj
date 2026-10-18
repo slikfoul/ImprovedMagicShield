@@ -14,6 +14,8 @@
     <Compile Include="../../ShieldActivity.cs" Link="ShieldActivity.cs" />
     <Compile Include="../../ShieldLabels.cs" Link="ShieldLabels.cs" />
     <Compile Include="../../ShieldLabelAnchor.cs" Link="ShieldLabelAnchor.cs" />
+    <Compile Include="../../ShieldHealthOutline.cs" Link="ShieldHealthOutline.cs" />
+    <Compile Include="../../ShieldOutlineSprites.cs" Link="ShieldOutlineSprites.cs" />
     <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>
     <Reference Include="Mono.Cecil"><HintPath>$(BepInExCore)\Mono.Cecil.dll</HintPath></Reference>
   </ItemGroup>

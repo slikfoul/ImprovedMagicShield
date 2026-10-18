@@ -99,6 +99,13 @@ namespace ImprovedMagicShield
             return TryEdge(character, true, out edge, out uiScale);
         }
 
+        internal RectTransform VisibleHealth(Character character)
+        {
+            if (!TryEdge(character, false, out _, out _) || health == null
+                || !health.gameObject.activeInHierarchy) return null;
+            return health;
+        }
+
         private bool TryEdge(Character character, bool aboveName, out Vector2 edge, out float uiScale)
         {
             edge = Vector2.zero; uiScale = 1f;

@@ -200,7 +200,8 @@ namespace UnityEngine
     public class Object
     {
         public string name;
-        public static void Destroy(GameObject obj) { obj.Destroyed=true; }
+        public bool AssetDestroyed;
+        public static void Destroy(Object obj) { obj.AssetDestroyed=true; if (obj is GameObject go) go.Destroyed=true; }
         public static GameObject Instantiate(GameObject source,Transform parent,bool world)
         {
             var objects=new Dictionary<Object,Object>();
@@ -241,9 +242,36 @@ namespace UnityEngine
     public class Behaviour : Component { public bool enabled=true; }
     public class Animator : Behaviour {}
     public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
-    public class Canvas : Behaviour { public RenderMode renderMode; public Camera worldCamera; public float scaleFactor=1; }
+    public class Canvas : Behaviour { public RenderMode renderMode; public Camera worldCamera; public float scaleFactor=1; public float referencePixelsPerUnit=100; }
     public class CanvasGroup : Behaviour { public float alpha=1f; public bool interactable=true,blocksRaycasts=true; }
-    public class Sprite : Object {}
+    public enum TextureFormat { RGBA32 }
+    public enum TextureWrapMode { Clamp }
+    public enum FilterMode { Bilinear }
+    public enum SpriteMeshType { FullRect }
+    public class Texture2D : Object
+    {
+        private readonly int width;
+        public Color[] Pixels;
+        public TextureWrapMode wrapMode;
+        public FilterMode filterMode;
+        public Texture2D(int w,int h,TextureFormat format,bool mipmaps) { width=w; }
+        public void SetPixels(Color[] pixels) { Pixels=pixels; }
+        public void Apply(bool update,bool unreadable) {}
+        public Color GetPixel(int x,int y) { return Pixels[y*width+x]; }
+    }
+    public class Sprite : Object
+    {
+        public Texture2D texture;
+        public static Sprite Create(Texture2D texture,Rect rect,Vector2 pivot,float pixels,uint extrude,SpriteMeshType mesh,Vector4 border)
+        { return new Sprite { texture=texture }; }
+    }
+    public struct Vector4 { public float x,y,z,w; public Vector4(float a,float b,float c,float d) {x=a;y=b;z=c;w=d;} }
+    public struct Vector2Int
+    {
+        public int x,y;
+        public Vector2Int(int a,int b) {x=a;y=b;}
+        public static Vector2Int zero {get {return new Vector2Int();}}
+    }
     public static class Debug { public static readonly List<string> Warnings=new List<string>(); public static void LogWarning(string text) { Warnings.Add(text); } }
     public class GameObject : Object
     {
@@ -368,7 +396,8 @@ namespace UnityEngine
 namespace UnityEngine.UI
 {
     public class Graphic : UnityEngine.Behaviour { public UnityEngine.Color color; public bool raycastTarget; }
-    public class Image : Graphic { public enum Type { Simple,Sliced,Tiled }; public UnityEngine.Sprite sprite; public Type type; }
+    public class Image : Graphic { public enum Type { Simple,Sliced,Tiled }; public UnityEngine.Sprite sprite; public Type type; public bool fillCenter=true; public float pixelsPerUnitMultiplier=1; }
+    public class RectMask2D : UnityEngine.Behaviour { public UnityEngine.Vector2Int softness; }
 }
 namespace TMPro
 {

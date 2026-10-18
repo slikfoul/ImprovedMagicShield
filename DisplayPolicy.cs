@@ -5,6 +5,11 @@ namespace ImprovedMagicShield
     internal static class DisplayPolicy
     {
         internal const double FreshSeconds = 2.0;
+        internal static float ProtectionFraction(float remaining, float capacity)
+        {
+            if (!(remaining > 0f) || !(capacity > 0f) || float.IsInfinity(remaining) || float.IsInfinity(capacity)) return 0f;
+            return Math.Min(1f, remaining / capacity);
+        }
         internal static float SnapshotAlpha(double activityAt, double now)
         {
             // Missing activity on older clients is not evidence of combat.

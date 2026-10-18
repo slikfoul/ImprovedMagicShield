@@ -9,6 +9,8 @@ namespace ImprovedMagicShield
         private static readonly int sampleKey = "Slikfoul.ImprovedMagicShield.SampleTime".GetStableHashCode();
         private static readonly int publisherKey = "Slikfoul.ImprovedMagicShield.Publisher".GetStableHashCode();
         private static readonly int activityKey = "Slikfoul.ImprovedMagicShield.ActivityTime".GetStableHashCode();
+        private static readonly int capacityKey = "Slikfoul.ImprovedMagicShield.Capacity".GetStableHashCode();
+        private static readonly int capacitySampleKey = "Slikfoul.ImprovedMagicShield.CapacitySampleTime".GetStableHashCode();
         private readonly HashSet<ZNetView> published = new HashSet<ZNetView>();
         private readonly List<Label> labels = new List<Label>();
         private readonly List<ScreenLabel> frameLabels = new List<ScreenLabel>();
@@ -20,6 +22,9 @@ namespace ImprovedMagicShield
         {
             internal Character Character;
             internal readonly ShieldLabelAnchor Anchor = new ShieldLabelAnchor();
+            internal readonly ShieldHealthOutline Outline = new ShieldHealthOutline();
+            internal void Dispose() { Anchor.Dispose(); Outline.Dispose(); }
+            internal void Hide() { Anchor.Hide(); Outline.Hide(); }
         }
         private struct ScreenLabel
         {
@@ -30,14 +35,16 @@ namespace ImprovedMagicShield
             internal bool AboveName;
         }
 
-        internal void Tick(bool enabled, bool show)
+        internal void Tick(bool enabled, bool show, bool showOutline = false)
         {
             if (!enabled || ZNet.instance == null)
             {
                 Clear();
                 return;
             }
-            if (!show) { ReleaseLabels(); ClearFrame(); }
+            if (!show && !showOutline) { ReleaseLabels(); ClearFrame(); }
+            if (!showOutline) foreach (Label label in labels) label.Outline.Hide();
+            if (!show) foreach (Label label in labels) label.Anchor.Hide();
             if (Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + 0.1f;
             var previous = new Dictionary<Character, Label>();
@@ -58,14 +65,18 @@ namespace ImprovedMagicShield
                     remaining = localShield == null ? 0f : ShieldRefresh.Remaining(localShield);
                     if (remaining > 0f)
                     {
+                        float capacity = ShieldRefresh.Capacity(localShield);
                         long activity = (long)((now - ShieldActivity.QuietTime(character, localShield, remaining)) * 1000.0);
                         // Keep supplying authoritative values when only local labels are hidden.
                         if (!published.Contains(view) || zdo.GetFloat(protectionKey, 0f) != remaining
+                            || zdo.GetFloat(capacityKey, 0f) != capacity
                             || now - zdo.GetLong(sampleKey, 0L) / 1000.0 >= 0.5 || zdo.GetLong(publisherKey, 0L) != zdo.GetOwner()
                             || System.Math.Abs(zdo.GetLong(activityKey, -1L) - activity) >= 50L)
                         {
                             zdo.Set(protectionKey, remaining);
+                            zdo.Set(capacityKey, capacity);
                             zdo.Set(sampleKey, (long)(now * 1000.0));
+                            zdo.Set(capacitySampleKey, (long)(now * 1000.0));
                             zdo.Set(publisherKey, zdo.GetOwner());
                             zdo.Set(activityKey, activity);
                             published.Add(view);
@@ -80,14 +91,14 @@ namespace ImprovedMagicShield
                         zdo.GetLong(publisherKey, 0L), zdo.GetOwner())) continue;
                 }
                 // Publishing above also includes our own character. Only its local label is excluded.
-                if (show && remaining > 0f && character != Player.m_localPlayer)
+                if ((show || showOutline) && remaining > 0f && character != Player.m_localPlayer)
                 {
                     if (!previous.TryGetValue(character, out Label label)) label = new Label { Character = character };
                     labels.Add(label);
                     previous.Remove(character);
                 }
             }
-            foreach (Label removed in previous.Values) removed.Anchor.Dispose();
+            foreach (Label removed in previous.Values) removed.Dispose();
             published.RemoveWhere(v => v == null || !v.IsValid() || !v.IsOwner());
         }
 
@@ -111,7 +122,7 @@ namespace ImprovedMagicShield
 
         private void ReleaseLabels()
         {
-            foreach (Label label in labels) label.Anchor.Dispose();
+            foreach (Label label in labels) label.Dispose();
             labels.Clear();
         }
 
@@ -156,28 +167,51 @@ namespace ImprovedMagicShield
             return true;
         }
 
+        private static float ProtectionFraction(Character character, float remaining)
+        {
+            ZNetView view = character.GetComponent<ZNetView>();
+            float capacity;
+            if (view.IsOwner())
+            {
+                SE_Shield shield = ShieldRefresh.FindShield(character);
+                capacity = shield == null ? 0f : ShieldRefresh.Capacity(shield);
+            }
+            else
+            {
+                ZDO zdo = view.GetZDO();
+                // An older owner can refresh the original snapshot fields while
+                // leaving a previous owner's capacity behind. Require one sample.
+                if (zdo.GetLong(capacitySampleKey, -1L) != zdo.GetLong(sampleKey, 0L)) return 0f;
+                capacity = zdo.GetFloat(capacityKey, 0f);
+            }
+            return DisplayPolicy.ProtectionFraction(remaining, capacity);
+        }
+
         // Called by the main camera immediately before culling, after camera/character LateUpdate.
         // The 10 Hz discovery/publication tick never samples world or screen coordinates.
-        internal void PrepareFrame(Camera camera, bool show, int scale = 100, int verticalOffset = 0)
+        internal void PrepareFrame(Camera camera, bool show, int scale = 100, int verticalOffset = 0, bool showOutline = false)
         {
             if (camera == null || camera != Utils.GetMainCamera()) return;
             ClearFrame();
-            if (!show || !CanShow())
+            if ((!show && !showOutline) || !CanShow())
             {
-                foreach (Label label in labels) label.Anchor.Hide();
+                foreach (Label label in labels) label.Hide();
                 return;
             }
             preparedFrame = Time.frameCount;
             preparedCamera = camera;
             foreach (Label label in labels)
             {
-                if (!TryDisplay(label.Character, out float remaining, out float alpha) || alpha <= 0f) { label.Anchor.Hide(); continue; }
+                if (!TryProtection(label.Character, out float remaining)) { label.Hide(); continue; }
                 // GetTopPoint uses TransformPoint(capsule.center), not physics collider.bounds.
                 // Follow the rendered root, without animated head motion or added interpolation.
                 Vector3 position = label.Character.GetTopPoint() + Vector3.up * 0.3f;
-                if ((position - camera.transform.position).sqrMagnitude > 60f * 60f) { label.Anchor.Hide(); continue; }
+                if ((position - camera.transform.position).sqrMagnitude > 60f * 60f) { label.Hide(); continue; }
                 Vector3 screen = camera.WorldToScreenPointScaled(position);
-                if (screen.z <= 0f || screen.x < 0f || screen.x > Screen.width || screen.y < 0f || screen.y > Screen.height) { label.Anchor.Hide(); continue; }
+                if (screen.z <= 0f || screen.x < 0f || screen.x > Screen.width || screen.y < 0f || screen.y > Screen.height) { label.Hide(); continue; }
+                if (showOutline) label.Outline.Render(label.Anchor.VisibleHealth(label.Character), ProtectionFraction(label.Character, remaining));
+                else label.Outline.Hide();
+                if (!show || !TryDisplay(label.Character, out remaining, out float alpha) || alpha <= 0f) { label.Anchor.Hide(); continue; }
                 float gap = 8f;
                 bool aboveName = label.Character is Player
                     || label.Character.gameObject.name.StartsWith("Skeleton_Friendly", System.StringComparison.Ordinal);

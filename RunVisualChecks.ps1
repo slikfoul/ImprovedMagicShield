@@ -9,6 +9,8 @@ $project = Join-Path $PSScriptRoot 'tests\VisualChecks'
 $log = Join-Path $artifacts 'visual-unity-checks.log'
 # Graphics initialization is needed to exercise the production client-only guard.
 $arguments = @('-batchmode','-quit','-projectPath',('"' + $project + '"'),'-executeMethod','ShieldVisualChecks.Run','-logFile',('"' + $log + '"'))
-$process = Start-Process -FilePath $UnityEditor -ArgumentList $arguments -WindowStyle Hidden -PassThru -Wait
+$process = Start-Process -FilePath $UnityEditor -ArgumentList $arguments -WindowStyle Hidden -PassThru
+# Wait for this editor, not its persistent shared licensing helpers.
+$process.WaitForExit()
 if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $result)) { throw "Unity component checks failed. Read $log" }
 Get-Content -LiteralPath $result
