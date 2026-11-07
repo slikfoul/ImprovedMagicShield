@@ -1,4 +1,14 @@
-# Improved Magic Shield 1.2.2 verification
+# Improved Magic Shield verification
+
+## Northern Vengeance (1.3.0)
+
+The installed game's `Staff_FrostOrbs` status asset starts the `vfx_FrostOrbs` sphere; the sphere prefab has a separate mesh and light. The new profile applies to that start effect only. The managed/installed-IL checks include classification of ordinary shields, Northern Vengeance, unrelated reactive effects, and shared prefab names. The Unity harness now includes a two-profile visual isolation fixture, but the configured Unity Editor was unavailable on this host, so the fixture and in-game appearance were not run for this version.
+
+### Priority and size
+
+The installed EffectsControl 1.0.1 assembly matches the bridge's observed method signatures, state dictionaries and stage field. The 2,315 managed/installed-IL checks cover the production prefix bodies with simulated visual objects: takeover restores the previous baseline, active shield profiles are independent, releasing a profile hands it back, and weapon effects and EffectsControl settings are unchanged. The test host drives the prefixes directly rather than installing Unity/Mono detours. The installed game prefabs share the same sphere mesh at scales 3.0 and 2.5; the Vengeance profile applies 0.90 to make its sphere 2.7 versus 2.5 at matching ovality. The new build has not been tested in a live game.
+
+## Version 1.2.2
 
 ## Automated coverage
 

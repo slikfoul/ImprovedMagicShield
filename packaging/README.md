@@ -56,7 +56,13 @@ The health outline uses the current shield's actual remaining/full protection, i
 
 All sliders use whole numbers. Glow, light brightness and opacity are percentages of the original appearance. Ovality narrows the bubble horizontally while preserving height and colliders. These controls affect only appearance, including visible shields on other characters; protection, duration and the shield HUD are unchanged. Turning the switch off restores the captured appearance of active effects.
 
-To use this block alongside EffectsControl, turn off **Magic shield** in EffectsControl, then turn on **Magic Shield Effect** here. While EffectsControl's shield controls or SubtleShield are active, this block is automatically suspended. Each client chooses its own appearance settings.
+An enabled appearance profile takes priority over EffectsControl 1.0.1 for its own shield. Disabling the profile hands that shield back; EffectsControl's weapon visuals and saved settings are preserved. SubtleShield and unverified newer EffectsControl versions can still suspend conflicting controls. Each client chooses its own appearance settings.
+
+### Northern Vengeance appearance
+
+In **4 - Northern Vengeance**, enable **Northern Vengeance Effect** to customize the Vengeance Sphere independently. It has the same five controls, with a sky-blue default hue of **200**. The other defaults are unchanged: glow **72**, light brightness **35**, opacity **30**, and ovality **50**. At matching ovality, the customized sphere is about **8%** larger than the Staff of Protection sphere. The switch is off by default.
+
+These settings affect the sphere's appearance on this client. They do not change retaliatory projectiles, damage, or the normal shield HUD.
 
 ## Installation and multiplayer
 

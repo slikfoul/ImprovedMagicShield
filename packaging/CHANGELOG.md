@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.0
+- Customize Northern Vengeance's Vengeance Sphere separately with a sky-blue default tint and controls for glow, light brightness, opacity and ovality. The customized sphere is slightly larger than the ordinary protection sphere.
+
 ## 1.2.2
 - Add an independent, optional purple health-bar shell for other shielded players and creatures, with a semicircular outer edge and rectangular opening; its external contour shows the remaining fraction of the actual applied shield.
 

@@ -38,14 +38,14 @@ public static class ShieldVisualChecks
         bep.GetType("BepInEx.Paths").GetMethod("SetExecutablePath",All).Invoke(null,new object[]{Path.Combine(testRoot,"valheim.exe"),testRoot,managed,new[]{core,managed}});
         Assembly harmony = Assembly.LoadFrom(Path.Combine(core,"0Harmony.dll"));
         mod = Assembly.LoadFrom(Path.Combine(root,"bin","Release","ImprovedMagicShield.dll"));
-        Check(mod.GetName().Version == new Version(1,2,2,0), "Release assembly version");
+        Check(mod.GetName().Version == new Version(1,3,0,0), "Release assembly version");
         Check(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null, "Run with graphics initialized to exercise the real client controller");
         Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow(); RoundedOutlinePreview();
         Type ht=harmony.GetType("HarmonyLib.Harmony"); object patcher=Activator.CreateInstance(ht,new object[]{"ImprovedMagicShield.VisualChecks"});
         try { ht.GetMethod("PatchAll",new[]{typeof(Assembly)}).Invoke(patcher,new object[]{mod}); Check(true,"All gameplay and visual Harmony hooks bind installed game signatures"); }
         finally { ht.GetMethod("UnpatchSelf").Invoke(patcher,null); }
-        string message="ImprovedMagicShield 1.2.2 Unity component checks passed: "+checks;
-        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.2.2.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
+        string message="ImprovedMagicShield 1.3.0 Unity component checks passed: "+checks;
+        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.3.0.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
     }
 
     private static void ConfigurationAndController()
@@ -78,7 +78,11 @@ public static class ShieldVisualChecks
             }
         } else Debug.LogWarning("ConfigurationManager ordering checks skipped: set SHIELD_CHECK_CONFIG_MANAGER to its DLL.");
 
-        object controller=New("ShieldVisualController",settings,new Action<string>(Debug.LogWarning));
+        object vengeance=New("VisualSettings",config,Enum.Parse(mod.GetType("ImprovedMagicShield.Visuals.ShieldAppearance"),"NorthernVengeance"));
+        Check(!(bool)Value(vengeance,"Enabled") && (int)Value(vengeance,"Color")==200,"Northern Vengeance has its own opt-in blue profile");
+        foreach(string field in new[]{"Glow","Light","Opacity","Ovality"})
+            Check((int)Value(vengeance,field)==(int)Value(settings,field),"Northern Vengeance shares the protection defaults for "+field);
+        object controller=New("ShieldVisualController",settings,vengeance,new Action<string>(Debug.LogWarning));
         Call(controller,"Tick",true); // Finish initial catalog rebuild while disabled.
         object catalog=Get(controller,"Catalog");
         var shield=ScriptableObject.CreateInstance(game.GetType("SE_Shield"));
@@ -88,6 +92,14 @@ public static class ShieldVisualChecks
         var filter=sphere.GetComponent<MeshFilter>(); Mesh nativeMesh=filter.sharedMesh;
         var renderer=sphere.GetComponent<MeshRenderer>(); Material nativeMaterial=renderer.sharedMaterial;
         var ambient=new GameObject("unrelated_torch(Clone)"); var otherLight=ambient.AddComponent<Light>(); otherLight.intensity=9;
+        var reaction=ScriptableObject.CreateInstance(game.GetType("SE_React")); reaction.name="Staff_FrostOrbs(Clone)";
+        object frostList=ListWithPrefab("vfx_FrostOrbs"); Set(reaction,"m_startEffects",frostList); Call(catalog,"Register",reaction);
+        var unrelated=ScriptableObject.CreateInstance(game.GetType("SE_React")); unrelated.name="OtherReaction";
+        object unrelatedList=ListWithPrefab("unrelated_torch"); Set(unrelated,"m_startEffects",unrelatedList); Call(catalog,"Register",unrelated);
+        var frost=new GameObject("vfx_FrostOrbs(Clone)"); var frostLight=frost.AddComponent<Light>(); frostLight.intensity=10;
+        var frostSphere=GameObject.CreatePrimitive(PrimitiveType.Sphere); frostSphere.name="Sphere"; frostSphere.transform.SetParent(frost.transform);
+        var frostRenderer=frostSphere.GetComponent<MeshRenderer>(); Material frostMaterial=frostRenderer.sharedMaterial;
+        var frostFilter=frostSphere.GetComponent<MeshFilter>(); Mesh frostMesh=frostFilter.sharedMesh;
         try {
             Call(controller,"ObserveNetwork",effect); Call(controller,"Tick",true);
             Near(light.intensity,8,"Disabled module makes no light writes");
@@ -108,6 +120,21 @@ public static class ShieldVisualChecks
             SetValue(settings,"Opacity",30); Call(controller,"Tick",true);
             Near(light.intensity,2.8f,"Re-enabling works on an existing bubble");
             Near(otherLight.intensity,9,"Unrelated scene effects are untouched");
+            Near(frostLight.intensity,10,"Protection profile leaves Northern Vengeance unchanged");
+            SetValue(vengeance,"Enabled",true); SetValue(vengeance,"Light",20); Call(controller,"Tick",true);
+            Color blue=frostRenderer.sharedMaterial.color;
+            Check(blue.b>blue.g && blue.g>blue.r,"Northern Vengeance uses its own sky-blue tint");
+            Near(frostLight.intensity,2,"Northern Vengeance uses its own brightness");
+            Near(light.intensity,2.8f,"Enabling Northern Vengeance does not change the protection profile");
+            Near(frostFilter.sharedMesh.bounds.size.x,frostMesh.bounds.size.x*0.75f*0.90f,"Northern Vengeance sphere uses ovality and normalized size");
+            SetValue(settings,"Enabled",false); Call(controller,"Tick",true);
+            Near(light.intensity,8,"Disabling protection restores only the original sphere");
+            Near(frostLight.intensity,2,"Northern Vengeance remains customized independently");
+            SetValue(vengeance,"Enabled",false); Call(controller,"Tick",true);
+            Near(frostLight.intensity,10,"Disabling Northern Vengeance restores its light");
+            Check(frostRenderer.sharedMaterial==frostMaterial && frostFilter.sharedMesh==frostMesh,"Disabling Northern Vengeance restores its material and mesh");
+            Near(otherLight.intensity,9,"Other reaction effects are never recolored");
+            SetValue(settings,"Enabled",true); Call(controller,"Tick",true);
             EffectsControlHandoff(controller,settings,effect,light);
             ConflictTransitions(controller,settings,effect,light);
         } finally {
@@ -115,7 +142,9 @@ public static class ShieldVisualChecks
             Near(light.intensity,8,"Controller unload restores current bubble");
             Check(filter.sharedMesh==nativeMesh && renderer.sharedMaterial==nativeMaterial,"Unload releases owned mesh and materials");
             UnityEngine.Object.DestroyImmediate(effect); UnityEngine.Object.DestroyImmediate(ambient); UnityEngine.Object.DestroyImmediate(shield);
-            foreach(object data in (Array)Get(list,"m_effectPrefabs")) UnityEngine.Object.DestroyImmediate((GameObject)Get(data,"m_prefab"));
+            UnityEngine.Object.DestroyImmediate(frost); UnityEngine.Object.DestroyImmediate(reaction); UnityEngine.Object.DestroyImmediate(unrelated);
+            foreach(object effectList in new[]{list,frostList,unrelatedList})
+                foreach(object data in (Array)Get(effectList,"m_effectPrefabs")) UnityEngine.Object.DestroyImmediate((GameObject)Get(data,"m_prefab"));
         }
     }
 

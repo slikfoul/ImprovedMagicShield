@@ -13,7 +13,7 @@ namespace ImprovedMagicShield
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "Slikfoul.ImprovedMagicShield";
-        public const string PluginVersion = "1.2.2";
+        public const string PluginVersion = "1.3.0";
         private Harmony harmony;
         private static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> showProtection;
@@ -38,12 +38,14 @@ namespace ImprovedMagicShield
             protectionPerSegment = Config.Bind("2 - Display", "Protection per segment", 50, new ConfigDescription("Full shield protection represented by one native 32-unit HUD segment. Lower values make the local bar longer. Width follows the currently applied shield, including another caster's shield. The frame keeps shrinking at higher values; its readable caption may extend beyond a short frame. Damage changes only the fill. Whole numbers only.", new AcceptableValueRange<int>(10, 500)));
             labelOffset = Config.Bind("2 - Display", "Label vertical offset", -20, new ConfigDescription("Move remaining-protection labels relative to their automatic position: above player and summoned skeleton names, below other visible name/health blocks. Positive values move up; negative values move down. Uses HUD units and follows the native header canvas scale. Does not move the local shield bar. Whole numbers only.", new AcceptableValueRange<int>(-200, 200)));
             var visualSettings = new VisualSettings(Config);
+            var vengeanceSettings = new VisualSettings(Config, ShieldAppearance.NorthernVengeance);
             try
             {
                 ShieldRefresh.VerifyFields();
-                shieldVisuals = new ShieldVisualController(visualSettings, message => Logger.LogWarning(message));
+                shieldVisuals = new ShieldVisualController(visualSettings, vengeanceSettings, message => Logger.LogWarning(message));
                 harmony = new Harmony(PluginGuid);
                 harmony.PatchAll(typeof(Plugin).Assembly);
+                EffectsControlPriority.Install(harmony, message => Logger.LogWarning(message));
                 labels = new ShieldLabels();
                 shieldHud = new ShieldHud();
                 Camera.onPreCull += PrepareLabels;
@@ -52,6 +54,7 @@ namespace ImprovedMagicShield
             }
             catch (Exception error)
             {
+                EffectsControlPriority.Stop();
                 if (harmony != null) harmony.UnpatchSelf();
                 hooksReady = false;
                 if (shieldVisuals != null) shieldVisuals.Dispose();
@@ -88,6 +91,7 @@ namespace ImprovedMagicShield
             if (labels != null) labels.Clear();
             if (shieldHud != null) shieldHud.Destroy();
             if (shieldVisuals != null) shieldVisuals.Dispose();
+            EffectsControlPriority.Stop();
             if (harmony != null) harmony.UnpatchSelf();
         }
     }

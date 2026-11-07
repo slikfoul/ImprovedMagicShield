@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using ImprovedMagicShield;
+using ImprovedMagicShield.Visuals;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using UnityEngine;
@@ -26,8 +27,35 @@ internal static class Program
         HudVisibilityChecks();
         ActivityDisplayChecks();
         HealthOutlineChecks();
+        ShieldAppearanceCatalogChecks();
+        VisualPriorityChecks.Run(Check);
         InstalledIlChecks(args[0], args[1]);
         Console.WriteLine("Passed " + checks + " automated checks: production refresh helpers, rejection state, disabled mode, labels/ZDO test doubles, installed-game IL and emitted replacement block. This is not live Unity or multiplayer testing.");
+    }
+
+    private static void ShieldAppearanceCatalogChecks()
+    {
+        EffectList Effects(string name) => new EffectList { m_effectPrefabs = new[] { new EffectList.EffectData { m_prefab = new GameObject(name) } } };
+        var protection = new SE_Shield(700, 0) { m_startEffects = Effects("vfx_StaffShield") };
+        var vengeance = new SE_React { name = "Staff_FrostOrbs(Clone)", m_startEffects = Effects("vfx_FrostOrbs"), m_stopEffects = Effects("UnrelatedImpact") };
+        var unrelated = new SE_React { name = "CustomReaction", m_startEffects = Effects("CustomSphere") };
+        var catalog = new ShieldVisualCatalog();
+        catalog.Register(protection);
+        catalog.Register(vengeance);
+        catalog.Register(unrelated);
+        Check(catalog.TryGetAppearance(new GameObject("vfx_StaffShield(Clone)"), out var original)
+            && original == ShieldAppearance.Protection, "Normal shield keeps its original appearance route.");
+        Check(catalog.Contains(vengeance.m_startEffects) && catalog.TryGetAppearance(new GameObject("vfx_FrostOrbs(Clone)"), out var frost)
+            && frost == ShieldAppearance.NorthernVengeance, "The actual Northern Vengeance status routes both locally and by network prefab.");
+        Check(!catalog.Contains(unrelated.m_startEffects) && !catalog.TryGetAppearance(new GameObject("CustomSphere"), out _),
+            "Other reactive buffs do not inherit Northern Vengeance appearance.");
+        Check(!catalog.Contains(vengeance.m_stopEffects) && !catalog.TryGetAppearance(new GameObject("UnrelatedImpact"), out _),
+            "Visual customization stays on the sphere.");
+        catalog.Register(new SE_Shield(1, 0) { m_startEffects = Effects("vfx_FrostOrbs") });
+        Check(!catalog.TryGetAppearance(new GameObject("vfx_FrostOrbs(Clone)"), out _), "A shared network prefab never gets an arbitrary profile.");
+        catalog.Clear();
+        Check(!catalog.Contains(vengeance.m_startEffects) && !catalog.TryGetAppearance(new GameObject("vfx_StaffShield"), out _),
+            "Scene reset drops both classifications.");
     }
 
     private static void HealthOutlineChecks()
@@ -396,7 +424,7 @@ internal static class Program
             Check(method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="Internal_AddStatusEffect")
                 && method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="IsOwner"),"SEMan ownership/RPC convergence changed.");
         var modPlugin=mod.MainModule.Types.Single(t=>t.Name=="Plugin");
-        Check(mod.Name.Version.ToString(3)=="1.2.2","Built DLL version differs.");
+        Check(mod.Name.Version.ToString(3)=="1.3.0","Built DLL version differs.");
         var awake=modPlugin.Methods.Single(m=>m.Name=="Awake").Body.Instructions;
         int showIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show remaining protection"));
         int enabledIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Enabled"));

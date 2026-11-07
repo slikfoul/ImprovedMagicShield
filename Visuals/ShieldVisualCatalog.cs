@@ -5,26 +5,45 @@ using UnityEngine;
 
 namespace ImprovedMagicShield.Visuals
 {
+    internal enum ShieldAppearance { Protection, NorthernVengeance }
+
     // Exact prefab/list provenance from shield status effects, never name fragments.
     internal sealed class ShieldVisualCatalog
     {
         private ConditionalWeakTable<EffectList, object> lists = new ConditionalWeakTable<EffectList, object>();
-        private readonly HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
-        public void Clear() { lists = new ConditionalWeakTable<EffectList, object>(); names.Clear(); }
+        private readonly Dictionary<string, ShieldAppearance?> names = new Dictionary<string, ShieldAppearance?>(StringComparer.Ordinal);
+        internal int Revision { get; private set; }
+        public void Clear() { lists = new ConditionalWeakTable<EffectList, object>(); names.Clear(); Revision++; }
         public bool Contains(EffectList list) { return list != null && lists.TryGetValue(list, out _); }
-        public bool Contains(GameObject root)
+        public bool TryGetAppearance(GameObject root, out ShieldAppearance appearance)
         {
+            appearance = default;
             if (!root) return false;
-            string name = root.name;
-            if (name.EndsWith("(Clone)", StringComparison.Ordinal)) name = name.Substring(0, name.Length - 7);
-            return names.Contains(name);
+            if (!names.TryGetValue(PrefabName(root.name), out var kind) || !kind.HasValue) return false;
+            appearance = kind.Value;
+            return true;
         }
-        public void Register(SE_Shield shield)
+        private static string PrefabName(string name)
         {
-            if (!shield) return;
-            Add(shield.m_startEffects); Add(shield.m_hitEffects); Add(shield.m_breakEffects); Add(shield.m_stopEffects);
+            return name.EndsWith("(Clone)", StringComparison.Ordinal) ? name.Substring(0, name.Length - 7) : name;
         }
-        private void Add(EffectList list)
+        public void Register(StatusEffect effect)
+        {
+            if (!effect) return;
+            if (effect is SE_Shield shield)
+            {
+                Add(shield.m_startEffects, ShieldAppearance.Protection);
+                Add(shield.m_hitEffects, ShieldAppearance.Protection);
+                Add(shield.m_breakEffects, ShieldAppearance.Protection);
+                Add(shield.m_stopEffects, ShieldAppearance.Protection);
+            }
+            else if (PrefabName(effect.name) == "Staff_FrostOrbs" && effect.GetType().Name == "SE_React")
+            {
+                // Register the sphere, not the retaliatory projectile or its impact effects.
+                Add(effect.m_startEffects, ShieldAppearance.NorthernVengeance);
+            }
+        }
+        private void Add(EffectList list, ShieldAppearance appearance)
         {
             if (list == null || list.m_effectPrefabs == null) return;
             if (!Contains(list)) lists.Add(list, new object());
@@ -32,7 +51,8 @@ namespace ImprovedMagicShield.Visuals
             {
                 var prefab = effect == null ? null : effect.m_prefab;
                 if (!Eligible(prefab)) continue;
-                names.Add(prefab.name);
+                if (!names.TryGetValue(prefab.name, out var previous)) { names.Add(prefab.name, appearance); Revision++; }
+                else if (previous.HasValue && previous != appearance) { names[prefab.name] = null; Revision++; }
             }
         }
         internal static bool Eligible(GameObject root)

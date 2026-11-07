@@ -19,17 +19,28 @@ namespace ImprovedMagicShield.Visuals
     {
         public readonly ConfigEntry<bool> Enabled;
         public readonly ConfigEntry<int> Color, Glow, Light, Opacity, Ovality;
+        private readonly bool vengeance;
 
         public VisualSettings(ConfigFile config)
+            : this(config, ShieldAppearance.Protection)
         {
-            const string section = "3 - Magic Shield";
-            Enabled = config.Bind(section, "Magic Shield Effect", false,
-                new ConfigDescription("Customize shield appearance on this client. Off by default. Disable Magic shield in EffectsControl before enabling this setting. Controls are suspended while EffectsControl shield controls or SubtleShield are active. Turning this off restores the captured appearance; shield protection and the HUD are unaffected.", null,
+        }
+
+        internal VisualSettings(ConfigFile config, ShieldAppearance appearance)
+        {
+            vengeance = appearance == ShieldAppearance.NorthernVengeance;
+            string section = vengeance ? "4 - Northern Vengeance" : "3 - Magic Shield";
+            string toggle = vengeance ? "Northern Vengeance Effect" : "Magic Shield Effect";
+            string compatibility = vengeance
+                ? "Takes priority over compatible EffectsControl versions. SubtleShield or an unsupported EffectsControl version can suspend this setting."
+                : "Takes priority over compatible EffectsControl versions. Turning this off returns the effect to EffectsControl if its Magic shield setting is enabled. SubtleShield or an unsupported EffectsControl version can suspend this setting.";
+            Enabled = config.Bind(section, toggle, false,
+                new ConfigDescription("Customize shield appearance on this client. Off by default. " + compatibility + " Turning this off restores the captured appearance; shield protection and the HUD are unaffected.", null,
                     new ConfigurationManagerAttributes { Order = 100 }));
-            Color = Integer(config, section, "Color", 269, 360, "Hue: 0/360 red, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta. Applied whenever Magic Shield Effect is enabled.");
+            Color = Integer(config, section, "Color", vengeance ? 200 : 269, 360, "Hue: 0/360 red, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta. Applied whenever this appearance is enabled.");
             Glow = Integer(config, section, "Glow", 72, 100, "Bubble and particle glow. 100 is original brightness.");
             Light = Integer(config, section, "Light brightness", 35, 100, "Shield light intensity. 100 is original brightness; light range is unchanged.");
-            Opacity = Integer(config, section, "Opacity", 30, 100, "Bubble and particle opacity. 100 is original opacity; 0 hides the visual shield without changing protection.");
+            Opacity = Integer(config, section, "Opacity", 30, 100, "Bubble and particle opacity. 100 is original opacity; 0 hides the visual shield without changing its gameplay effect.");
             Ovality = Integer(config, section, "Ovality", 50, 100, "Bubble shape: 0 round, 50 oval, 100 narrow oval. Height and colliders are unchanged.");
         }
 
@@ -43,6 +54,9 @@ namespace ImprovedMagicShield.Visuals
             return new VisualOptions {
                 TintEnabled = true, Tint = UnityEngine.Color.HSVToRGB(Color.Value / 360f, 1, 1),
                 Glow = Glow.Value / 100f, Light = Light.Value / 100f, Opacity = Opacity.Value / 100f,
+                // Both vanilla prefabs use the same mesh: 2.5 for Protection, 3.0 for
+                // Vengeance. A factor of 0.90 brings Vengeance to 2.7 (8% larger).
+                Size = vengeance ? 0.90f : 1f,
                 ShieldOvality = Ovality.Value / 100f
             };
         }

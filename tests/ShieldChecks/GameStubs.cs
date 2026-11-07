@@ -8,7 +8,7 @@ using UnityEngine;
 namespace ImprovedMagicShield { internal static class Plugin { internal static bool IsEnabled = true; } }
 public static class Game { public static int m_worldLevel; }
 public class HitData { public short m_itemLevel; public float m_skillLevel; }
-public class Character
+public class Character : UnityEngine.Object
 {
     public BaseAI AI;
     public BaseAI GetBaseAI() { return AI; }
@@ -105,8 +105,15 @@ public class GuiBar : Behaviour
     public void SetColor(Color color) { m_bar.GetComponent<UnityEngine.UI.Image>().color=color; }
 }
 public class NativeResourceUpdater : Behaviour {}
-public class StatusEffect
+public class Piece : UnityEngine.Object {}
+public class EffectList
 {
+    public class EffectData { public GameObject m_prefab; }
+    public EffectData[] m_effectPrefabs;
+}
+public class StatusEffect : UnityEngine.Object
+{
+    public EffectList m_startEffects, m_stopEffects;
     public float m_ttl = 60f;
     public short m_hitVariant = -1;
     public float Time = 25f;
@@ -122,6 +129,7 @@ public class StatusEffect
 }
 public class SE_Shield : StatusEffect
 {
+    public EffectList m_hitEffects, m_breakEffects;
     public float m_absorbDamage = 100f;
     public float m_absorbDamagePerSkillLevel = 4f;
     public float m_absorbDamageWorldLevel = 100f;
@@ -141,6 +149,7 @@ public class SE_Shield : StatusEffect
         base.SetLevel(itemLevel, skillLevel);
     }
 }
+public class SE_React : StatusEffect {}
 public class SEMan
 {
     public StatusEffect Effect;
@@ -201,6 +210,7 @@ namespace UnityEngine
     {
         public string name;
         public bool AssetDestroyed;
+        public static implicit operator bool(Object obj) { return obj != null && !obj.AssetDestroyed; }
         public static void Destroy(Object obj) { obj.AssetDestroyed=true; if (obj is GameObject go) go.Destroyed=true; }
         public static GameObject Instantiate(GameObject source,Transform parent,bool world)
         {
@@ -275,6 +285,7 @@ namespace UnityEngine
     public static class Debug { public static readonly List<string> Warnings=new List<string>(); public static void LogWarning(string text) { Warnings.Add(text); } }
     public class GameObject : Object
     {
+        public SceneManagement.Scene scene = new SceneManagement.Scene();
         public bool activeSelf=true,Destroyed;
         public bool activeInHierarchy { get { return activeSelf && !Destroyed && (transform.parent == null || transform.parent.gameObject.activeInHierarchy); } }
         public Transform transform;
@@ -293,6 +304,7 @@ namespace UnityEngine
             foreach (Transform child in transform.Children) if (inactive || child.gameObject.activeSelf) result.AddRange(child.gameObject.GetComponentsInChildren<T>(inactive));
             return result.ToArray();
         }
+        public T GetComponentInChildren<T>(bool inactive) { return GetComponentsInChildren<T>(inactive).FirstOrDefault(); }
         public void SetActive(bool active) { activeSelf=active; }
     }
     public class Transform : Component

@@ -16,6 +16,9 @@
     <Compile Include="../../ShieldLabelAnchor.cs" Link="ShieldLabelAnchor.cs" />
     <Compile Include="../../ShieldHealthOutline.cs" Link="ShieldHealthOutline.cs" />
     <Compile Include="../../ShieldOutlineSprites.cs" Link="ShieldOutlineSprites.cs" />
+    <Compile Include="../../Visuals/ShieldVisualCatalog.cs" Link="ShieldVisualCatalog.cs" />
+    <Compile Include="../../Visuals/ShieldVisualController.cs" Link="ShieldVisualController.cs" />
+    <Compile Include="../../Visuals/EffectsControlPriority.cs" Link="EffectsControlPriority.cs" />
     <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>
     <Reference Include="Mono.Cecil"><HintPath>$(BepInExCore)\Mono.Cecil.dll</HintPath></Reference>
   </ItemGroup>

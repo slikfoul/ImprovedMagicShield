@@ -9,8 +9,8 @@ namespace ImprovedMagicShield.Visuals
     internal static class VisualDatabaseCopyHook { private static void Postfix() { ShieldVisualController.Instance?.RequestCatalog(); } }
     [HarmonyPatch(typeof(ZNetScene), "Awake")]
     internal static class VisualSceneHook { private static void Postfix() { ShieldVisualController.Instance?.RequestCatalog(); } }
-    [HarmonyPatch(typeof(SE_Shield), "Setup")]
-    internal static class VisualShieldSetupHook { private static void Prefix(SE_Shield __instance) { ShieldVisualController.Instance?.Register(__instance); } }
+    [HarmonyPatch(typeof(StatusEffect), "Setup")]
+    internal static class VisualShieldSetupHook { private static void Prefix(StatusEffect __instance) { ShieldVisualController.Instance?.Register(__instance); } }
     [HarmonyPatch(typeof(EffectList), "Create")]
     internal static class VisualEffectCreateHook
     {

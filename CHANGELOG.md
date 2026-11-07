@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+- Customize Northern Vengeance's Vengeance Sphere separately with a sky-blue default tint and controls for glow, light brightness, opacity and ovality.
+- Give enabled Improved Magic Shield appearance profiles priority over EffectsControl 1.0.1.
+- Size the customized Vengeance Sphere just above the ordinary protection sphere.
+
 ## 1.2.2
 - Give the shield health shell a semicircular outer silhouette and square inner opening, with a thicker, brighter purple band while retaining the external percentage clipping.
 
