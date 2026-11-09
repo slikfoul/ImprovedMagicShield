@@ -78,7 +78,7 @@ namespace ImprovedMagicShield.Visuals
             {
                 var root = __args[0] as GameObject;
                 var controller = ShieldVisualController.Instance;
-                if (controller?.Claims(root) != true) return true;
+                if (controller == null || controller.CooperativePriority || !controller.Claims(root)) return true;
                 deferred[root] = __args[1];
                 controller.Observe(root);
                 return false;
@@ -92,7 +92,7 @@ namespace ImprovedMagicShield.Visuals
             {
                 if (!Ready) { if (deferred.Count > 0) ResumeReleased(null); return; }
                 var controller = ShieldVisualController.Instance;
-                if (controller == null) return;
+                if (controller == null || controller.CooperativePriority) return;
                 controller.RefreshCatalog();
                 int mask = controller.PriorityMask;
                 int revision = controller.Catalog.Revision;

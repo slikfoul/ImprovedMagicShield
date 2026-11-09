@@ -31,8 +31,8 @@ Display switches are independent:
 | --- | --- | --- |
 | **Enabled** | On | Master switch for improved refreshes and displays; each display also has its own switch. Turning this off returns subsequent casts to vanilla behavior and hides the mod's displays without removing active shields. |
 | **Show local shield bar** | On | Show your own `250 / 500` bar in a fixed row above the normal lower resource bars. The fill uses the actual remaining/full capacity of your current shield. It fades out after five quiet seconds, even when damaged, and returns on a cast, shield damage or combat activity. |
-| **Show remaining protection** | Off | Show `123` above player and summoned skeleton names and below the visible name/health block of other shielded creatures within 60 metres of the camera. Never shown on your own character, even when the local HUD bar is off. Appears on that character's shield cast, shield damage or combat, then fades after five quiet seconds. Your own combat does not reveal other characters' labels. This does not enable or disable the local HUD bar. |
-| **Show shield health outline** | Off | Draw a purple shell with a semicircular outer edge and a rectangular inner opening around other shielded players' and creatures' visible health bars. The visible contour spans the full bar at full shield protection and its left half at 50%, without drawing a vertical line through health. It does not change native health or enable overhead numbers. |
+| **Show remaining protection** | On | Show `123` above player and summoned skeleton names and below the visible name/health block of other shielded creatures within 60 metres of the camera. Never shown on your own character, even when the local HUD bar is off. Appears on that character's shield cast, shield damage or combat, then fades after five quiet seconds. Your own combat does not reveal other characters' labels. This does not enable or disable the local HUD bar. |
+| **Show shield health outline** | On | Draw a purple shell with a semicircular outer edge and a rectangular inner opening around other shielded players' and creatures' visible health bars. The visible contour spans the full bar at full shield protection and its left half at 50%, without drawing a vertical line through health. It does not change native health or enable overhead numbers. |
 
 The health outline uses the current shield's actual remaining/full protection, including another caster's shield: `200 / 200` and `700 / 700` both cover the whole bar, while `150 / 300` covers half. It follows the native health bar's position, scale and visibility, remains visible while that bar and the shield are active, and disappears when the shield runs out. It is independent of the number display's combat fade. The owning peer needs this mod's capacity snapshots (version 1.2.0 or newer); missing or stale data hides the outline rather than inventing a percentage. Its switch is independent of **Magic Shield Effect**.
 
@@ -44,11 +44,11 @@ The health outline uses the current shield's actual remaining/full protection, i
 
 ### Magic Shield appearance
 
-**Magic Shield Effect** is a separate switch, **off by default**. It enables all five appearance controls below on this client, including color. There is no separate Change color switch.
+**Magic Shield Effect** is a separate switch, **on by default**. It enables all five appearance controls below on this client, including color. There is no separate Change color switch.
 
 | Setting | Default | Range |
 | --- | ---: | ---: |
-| Color | 269 | 0–360 hue |
+| Color | 0 | 0–360 hue |
 | Glow | 72 | 0–100 |
 | Light brightness | 35 | 0–100 |
 | Opacity | 30 | 0–100 |
@@ -56,11 +56,11 @@ The health outline uses the current shield's actual remaining/full protection, i
 
 All sliders use whole numbers. Glow, light brightness and opacity are percentages of the original appearance. Ovality narrows the bubble horizontally while preserving height and colliders. These controls affect only appearance, including visible shields on other characters; protection, duration and the shield HUD are unchanged. Turning the switch off restores the captured appearance of active effects.
 
-An enabled appearance profile takes priority over EffectsControl 1.0.1 for its own shield. Disabling the profile hands that shield back; EffectsControl's weapon visuals and saved settings are preserved. SubtleShield and unverified newer EffectsControl versions can still suspend conflicting controls. Each client chooses its own appearance settings.
+With a compatible EffectsControl version, each shield uses Improved Magic Shield's appearance if its profile is enabled, then EffectsControl's enabled profile, then its original appearance. The two mods keep their settings and weapon effects separate. In F1, a shield section shows **Controlled by EffectsControl.** only while EffectsControl owns that shield. SubtleShield and unverified EffectsControl versions can still suspend conflicting controls.
 
 ### Northern Vengeance appearance
 
-In **4 - Northern Vengeance**, enable **Northern Vengeance Effect** to customize the Vengeance Sphere independently. It has the same five controls, with a sky-blue default hue of **200**. The other defaults are unchanged: glow **72**, light brightness **35**, opacity **30**, and ovality **50**. At matching ovality, the customized sphere is about **8%** larger than the Staff of Protection sphere. The switch is off by default.
+In **4 - Northern Vengeance**, **Northern Vengeance Effect** customizes the Vengeance Sphere independently. It has the same five controls, with a sky-blue default hue of **200**. The other defaults are unchanged: glow **72**, light brightness **35**, opacity **30**, and ovality **50**. At matching ovality, the customized sphere is about **8%** larger than the Staff of Protection sphere. The switch is on by default.
 
 These settings affect the sphere's appearance on this client. They do not change retaliatory projectiles, damage, or the normal shield HUD.
 

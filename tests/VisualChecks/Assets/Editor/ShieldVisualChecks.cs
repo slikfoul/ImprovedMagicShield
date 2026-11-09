@@ -38,14 +38,14 @@ public static class ShieldVisualChecks
         bep.GetType("BepInEx.Paths").GetMethod("SetExecutablePath",All).Invoke(null,new object[]{Path.Combine(testRoot,"valheim.exe"),testRoot,managed,new[]{core,managed}});
         Assembly harmony = Assembly.LoadFrom(Path.Combine(core,"0Harmony.dll"));
         mod = Assembly.LoadFrom(Path.Combine(root,"bin","Release","ImprovedMagicShield.dll"));
-        Check(mod.GetName().Version == new Version(1,3,0,0), "Release assembly version");
+        Check(mod.GetName().Version == new Version(1,4,0,0), "Release assembly version");
         Check(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null, "Run with graphics initialized to exercise the real client controller");
         Visuals(); ShieldShape(); ConfigurationAndController(); NativeLabelGeometry(); NativeShieldRow(); RoundedOutlinePreview();
         Type ht=harmony.GetType("HarmonyLib.Harmony"); object patcher=Activator.CreateInstance(ht,new object[]{"ImprovedMagicShield.VisualChecks"});
         try { ht.GetMethod("PatchAll",new[]{typeof(Assembly)}).Invoke(patcher,new object[]{mod}); Check(true,"All gameplay and visual Harmony hooks bind installed game signatures"); }
         finally { ht.GetMethod("UnpatchSelf").Invoke(patcher,null); }
-        string message="ImprovedMagicShield 1.3.0 Unity component checks passed: "+checks;
-        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.3.0.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
+        string message="ImprovedMagicShield 1.4.0 Unity component checks passed: "+checks;
+        Debug.Log(message); File.WriteAllText(Path.Combine(root,"artifacts","visual-checks-1.4.0.txt"),message+"\nNo Valheim gameplay or multiplayer test.\n");
     }
 
     private static void ConfigurationAndController()
@@ -54,10 +54,10 @@ public static class ShieldVisualChecks
         if(File.Exists(path)) File.Delete(path);
         object config=Activator.CreateInstance(bep.GetType("BepInEx.Configuration.ConfigFile"),new object[]{path,false});
         object settings=New("VisualSettings",config);
-        Check(!(bool)Value(settings,"Enabled"),"Visual master is disabled by default");
-        Check((int)Value(settings,"Color")==269 && (int)Value(settings,"Glow")==72 && (int)Value(settings,"Light")==35 && (int)Value(settings,"Opacity")==30 && (int)Value(settings,"Ovality")==50,"Screenshot values are the initial slider defaults");
+        Check((bool)Value(settings,"Enabled"),"Visual master is enabled by default");
+        Check((int)Value(settings,"Color")==0 && (int)Value(settings,"Glow")==72 && (int)Value(settings,"Light")==35 && (int)Value(settings,"Opacity")==30 && (int)Value(settings,"Ovality")==50,"Protection slider defaults");
         Call(config,"Save"); string text=File.ReadAllText(path);
-        Check(text.Contains("Magic Shield Effect = false") && !text.Contains("Change color ="),"One visual switch replaces Change color");
+        Check(text.Contains("Magic Shield Effect = true") && !text.Contains("Change color ="),"One visual switch replaces Change color");
         Check(!System.Text.RegularExpressions.Regex.IsMatch(text,@"[\u0400-\u04FF]"),"Generated UI text is English");
         foreach(var field in settings.GetType().GetFields(All))
             if(field.FieldType.IsGenericType) Check(new[]{typeof(bool),typeof(int)}.Contains(field.FieldType.GetGenericArguments()[0]),"Integer numeric control "+field.Name);
@@ -79,9 +79,10 @@ public static class ShieldVisualChecks
         } else Debug.LogWarning("ConfigurationManager ordering checks skipped: set SHIELD_CHECK_CONFIG_MANAGER to its DLL.");
 
         object vengeance=New("VisualSettings",config,Enum.Parse(mod.GetType("ImprovedMagicShield.Visuals.ShieldAppearance"),"NorthernVengeance"));
-        Check(!(bool)Value(vengeance,"Enabled") && (int)Value(vengeance,"Color")==200,"Northern Vengeance has its own opt-in blue profile");
+        Check((bool)Value(vengeance,"Enabled") && (int)Value(vengeance,"Color")==200,"Northern Vengeance defaults to its own blue profile");
         foreach(string field in new[]{"Glow","Light","Opacity","Ovality"})
             Check((int)Value(vengeance,field)==(int)Value(settings,field),"Northern Vengeance shares the protection defaults for "+field);
+        SetValue(settings,"Enabled",false); SetValue(vengeance,"Enabled",false);
         object controller=New("ShieldVisualController",settings,vengeance,new Action<string>(Debug.LogWarning));
         Call(controller,"Tick",true); // Finish initial catalog rebuild while disabled.
         object catalog=Get(controller,"Catalog");

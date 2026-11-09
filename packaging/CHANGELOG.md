@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+- Coordinate each shield's appearance independently with compatible EffectsControl versions, with an F1 indicator when EffectsControl handles that shield.
+- Enable shield appearance profiles, remaining protection labels, and shield health outlines by default in new configurations.
+
 ## 1.3.0
 - Customize Northern Vengeance's Vengeance Sphere separately with a sky-blue default tint and controls for glow, light brightness, opacity and ovality. The customized sphere is slightly larger than the ordinary protection sphere.
 

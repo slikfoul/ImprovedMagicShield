@@ -1,5 +1,9 @@
 # Improved Magic Shield verification
 
+## Cooperative EffectsControl compatibility (1.4.0)
+
+The managed/installed-IL suite passed 2,337 checks, including both Display options being enabled by default in new configurations. Both appearance profiles also use an enabled default without overwriting saved settings. The cooperative fixture exercises both shield bits, synchronous release before capture, retained applied bits until restoration, per-section ownership hints, recovery after callback failure, global disable, and SubtleShield. The previous EffectsControl 1.0.1 bridge remains covered. The installed ConfigurationManager was inspected for dynamic `Browsable` support. The new pair has not been tested in a live Valheim session.
+
 ## Northern Vengeance (1.3.0)
 
 The installed game's `Staff_FrostOrbs` status asset starts the `vfx_FrostOrbs` sphere; the sphere prefab has a separate mesh and light. The new profile applies to that start effect only. The managed/installed-IL checks include classification of ordinary shields, Northern Vengeance, unrelated reactive effects, and shared prefab names. The Unity harness now includes a two-profile visual isolation fixture, but the configured Unity Editor was unavailable on this host, so the fixture and in-game appearance were not run for this version.

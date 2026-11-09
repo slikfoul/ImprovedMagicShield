@@ -68,10 +68,82 @@ internal static class VisualPriorityChecks
             Near(ordinary, 25, "EffectsControl takes the ordinary sphere back after restoration.");
             check(effects.Config.TryGetEntry("1. General", "Magic shield", out BepInEx.Configuration.ConfigEntry<bool> saved)
                 && saved.Value, "Priority never changes the other mod's setting.");
+
+            EffectsControlPriority.Stop();
+            effects.BeforeObserve = null;
+            effects.BeforeLateUpdate = null;
+            Chainloader.PluginInfos[EffectsControlPriority.Guid].Metadata.Version = new Version(1, 1, 0);
+            check(controller.ConnectPriority(2, _ => { }, () => 3) == null, "An unsupported protocol is rejected.");
+            check(controller.ConnectPriority(1, null, () => 3) == null, "An incomplete handshake is rejected.");
+            int peerMask = 3, releaseMask = 0, releaseCalls = 0;
+            bool failRelease = false, failRead = false;
+            Func<int> owned = controller.ConnectPriority(1, mask =>
+            {
+                if (failRelease) throw new InvalidOperationException("simulated release failure");
+                releaseMask = mask;
+                releaseCalls++;
+                effects.ReleaseShields(mask);
+            }, () => failRead ? throw new InvalidOperationException("simulated read failure") : peerMask);
+            bool Owner(ShieldAppearance appearance) => controller.ControlledByEffectsControl(appearance);
+            void CooperativeFrame()
+            {
+                controller.ReleaseLightWrites();
+                if ((peerMask & 1 & ~owned()) != 0) effects.Observe(ordinary, EffectsControl.EffectStage.Shield);
+                if ((peerMask & 2 & ~owned()) != 0) effects.Observe(frost, EffectsControl.EffectStage.Impact);
+                effects.LateUpdate();
+                controller.Tick(ImprovedMagicShield.Plugin.IsEnabled);
+            }
+            check(owned() == 0 && Owner(ShieldAppearance.Protection) && Owner(ShieldAppearance.NorthernVengeance),
+                "F1 shows the peer only in its two enabled sections.");
+            protection.Enabled.Value = true;
+            check(owned() == 1 && !Owner(ShieldAppearance.Protection) && Owner(ShieldAppearance.NorthernVengeance),
+                "The first desired profile already reserves only its own shield.");
+            CooperativeFrame();
+            Near(ordinary, 35, "The synchronous handoff releases EffectsControl before capture.");
+            Near(frost, 25, "The peer retains the other sphere.");
+            check(releaseCalls == 1 && releaseMask == 1, "Only Protection was released on its transition.");
+            vengeance.Enabled.Value = true;
+            CooperativeFrame();
+            Near(frost, 48, "Northern Vengeance takes over from its peer independently.");
+            check(owned() == 3 && releaseCalls == 2 && releaseMask == 2, "Only newly enabled Northern Vengeance was released.");
+            protection.Enabled.Value = false;
+            check(owned() == 3 && !Owner(ShieldAppearance.Protection), "An applied profile still holds priority until restoration.");
+            CooperativeFrame();
+            Near(ordinary, 100, "The original sphere is restored before giving ownership back.");
+            check(owned() == 2 && Owner(ShieldAppearance.Protection) && !Owner(ShieldAppearance.NorthernVengeance),
+                "Only the restored shield gets the EffectsControl hint.");
+            CooperativeFrame();
+            Near(ordinary, 25, "The peer captures the original state after the handoff.");
+            Near(weapon, 25, "The cooperative protocol leaves weapon effects alone.");
+            check(releaseCalls == 2, "Unchanged profiles are not released every frame.");
+            ImprovedMagicShield.Plugin.IsEnabled = false;
+            check(owned() == 2, "The applied bit also survives a global disable until restoration.");
+            CooperativeFrame();
+            check(owned() == 0 && Owner(ShieldAppearance.NorthernVengeance), "Global disable returns ownership to the enabled peer.");
+            ImprovedMagicShield.Plugin.IsEnabled = true;
+            failRelease = true;
+            CooperativeFrame();
+            check(owned() == 0 && Owner(ShieldAppearance.NorthernVengeance), "A failed release yields safely without visual writes.");
+            vengeance.Enabled.Value = false;
+            CooperativeFrame();
+            failRelease = false;
+            vengeance.Enabled.Value = true;
+            CooperativeFrame();
+            Near(frost, 48, "A deliberate disable/re-enable recovers from a failed handoff.");
+            failRead = true;
+            check(!Owner(ShieldAppearance.Protection), "A failed peer read does not mislabel the original.");
+            failRead = false;
+            peerMask = 2;
+            check(!Owner(ShieldAppearance.Protection), "The original appearance does not get a peer hint.");
+            Chainloader.PluginInfos["subtleshield"] = new PluginInfo { Metadata = new BepInPlugin { GUID = "subtleshield", Name = "SubtleShield" } };
+            CooperativeFrame();
+            check(owned() == 0 && !Owner(ShieldAppearance.NorthernVengeance), "SubtleShield restores the visuals and hides peer hints.");
+            Chainloader.PluginInfos.Remove("subtleshield");
         }
         finally
         {
             controller.Dispose();
+            ImprovedMagicShield.Plugin.IsEnabled = true;
             EffectsControlPriority.Stop();
             Chainloader.PluginInfos.Clear();
             Resources.Objects.Clear();
@@ -179,6 +251,19 @@ namespace EffectsControl
             foreach (var pair in pending) active[pair.Key] = new VisualState(pair.Key, pair.Value);
             pending.Clear();
             foreach (var state in active.Values) state.Apply();
+        }
+        internal void ReleaseShields(int mask)
+        {
+            int Bit(GameObject root) => root.name.StartsWith("vfx_StaffShield", StringComparison.Ordinal) ? 1
+                : root.name.StartsWith("vfx_FrostOrbs", StringComparison.Ordinal) ? 2 : 0;
+            foreach (var root in new List<GameObject>(active.Keys))
+            {
+                if ((mask & Bit(root)) == 0) continue;
+                active[root].Dispose();
+                active.Remove(root);
+            }
+            foreach (var root in new List<GameObject>(pending.Keys))
+                if ((mask & Bit(root)) != 0) pending.Remove(root);
         }
     }
 }

@@ -424,14 +424,14 @@ internal static class Program
             Check(method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="Internal_AddStatusEffect")
                 && method.Body.Instructions.Any(i=>i.Operand is MethodReference m && m.Name=="IsOwner"),"SEMan ownership/RPC convergence changed.");
         var modPlugin=mod.MainModule.Types.Single(t=>t.Name=="Plugin");
-        Check(mod.Name.Version.ToString(3)=="1.3.0","Built DLL version differs.");
+        Check(mod.Name.Version.ToString(3)=="1.4.0","Built DLL version differs.");
         var awake=modPlugin.Methods.Single(m=>m.Name=="Awake").Body.Instructions;
         int showIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show remaining protection"));
         int enabledIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Enabled"));
         int hudIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show local shield bar"));
         int outlineIndex=awake.ToList().FindIndex(i=>Equals(i.Operand,"Show shield health outline"));
-        Check(outlineIndex>=0 && awake[outlineIndex+1].OpCode.Code==Code.Ldc_I4_0,"Health outline must have its own off-by-default setting.");
-        Check(showIndex>=0 && awake[showIndex+1].OpCode.Code==Code.Ldc_I4_0,"Label default must be off.");
+        Check(outlineIndex>=0 && awake[outlineIndex+1].OpCode.Code==Code.Ldc_I4_1,"Health outline must have its own on-by-default setting.");
+        Check(showIndex>=0 && awake[showIndex+1].OpCode.Code==Code.Ldc_I4_1,"Label default must be on.");
         Check(enabledIndex>=0 && awake[enabledIndex+1].OpCode.Code==Code.Ldc_I4_1,"Mechanics default must be on.");
         Check(hudIndex>=0 && awake[hudIndex+1].OpCode.Code==Code.Ldc_I4_1,"Local HUD default must be on.");
         var top=character.Methods.Single(m=>m.Name=="GetTopPoint").Body.Instructions;

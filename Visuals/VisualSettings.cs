@@ -1,3 +1,4 @@
+using System;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -34,10 +35,18 @@ namespace ImprovedMagicShield.Visuals
             string compatibility = vengeance
                 ? "Takes priority over compatible EffectsControl versions. SubtleShield or an unsupported EffectsControl version can suspend this setting."
                 : "Takes priority over compatible EffectsControl versions. Turning this off returns the effect to EffectsControl if its Magic shield setting is enabled. SubtleShield or an unsupported EffectsControl version can suspend this setting.";
-            Enabled = config.Bind(section, toggle, false,
-                new ConfigDescription("Customize shield appearance on this client. Off by default. " + compatibility + " Turning this off restores the captured appearance; shield protection and the HUD are unaffected.", null,
+            Enabled = config.Bind(section, toggle, true,
+                new ConfigDescription("Customize shield appearance on this client. On by default. " + compatibility + " Turning this off restores the captured appearance; shield protection and the HUD are unaffected.", null,
                     new ConfigurationManagerAttributes { Order = 100 }));
-            Color = Integer(config, section, "Color", vengeance ? 200 : 269, 360, "Hue: 0/360 red, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta. Applied whenever this appearance is enabled.");
+            const string ownerNote = "Controlled by EffectsControl.";
+            config.Bind(section, "Appearance owner", ownerNote,
+                new ConfigDescription("Shows when EffectsControl handles this shield's appearance.", null,
+                    new ConfigurationManagerAttributes {
+                        Order = 200, ReadOnly = true, HideDefaultButton = true, HideSettingName = true,
+                        CustomDrawer = _ => GUILayout.Label(ownerNote),
+                        Visible = () => ShieldVisualController.Instance?.ControlledByEffectsControl(appearance) == true
+                    }));
+            Color = Integer(config, section, "Color", vengeance ? 200 : 0, 360, "Hue: 0/360 red, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta. Applied whenever this appearance is enabled.");
             Glow = Integer(config, section, "Glow", 72, 100, "Bubble and particle glow. 100 is original brightness.");
             Light = Integer(config, section, "Light brightness", 35, 100, "Shield light intensity. 100 is original brightness; light range is unchanged.");
             Opacity = Integer(config, section, "Opacity", 30, 100, "Bubble and particle opacity. 100 is original opacity; 0 hides the visual shield without changing its gameplay effect.");
@@ -66,5 +75,10 @@ namespace ImprovedMagicShield.Visuals
     internal sealed class ConfigurationManagerAttributes
     {
         public int Order;
+        public bool? ReadOnly;
+        public bool HideDefaultButton, HideSettingName;
+        public Action<ConfigEntryBase> CustomDrawer;
+        internal Func<bool> Visible;
+        public bool Browsable => Visible == null || Visible();
     }
 }
